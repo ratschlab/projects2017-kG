@@ -69,7 +69,7 @@ def main():
 
     opts['gmm_modes_num'] = 10
     opts['latent_space_dim'] = FLAGS.zdim
-    opts["gan_epoch_num"] = 1
+    opts["gan_epoch_num"] = 5
     opts["mixture_c_epoch_num"] = 3#5
     opts['opt_learning_rate'] = FLAGS.learning_rate
     opts['opt_d_learning_rate'] = FLAGS.d_learning_rate

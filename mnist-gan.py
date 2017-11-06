@@ -26,7 +26,7 @@ flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]"
 flags.DEFINE_integer("zdim", 8, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.01, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights")
-flags.DEFINE_string("workdir", 'results_mnist_soft_1_epoch_per_gan', "Working directory ['results']")
+flags.DEFINE_string("workdir", 'results_mnist_soft', "Working directory ['results']")
 flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
 flags.DEFINE_bool("vae", False, "Use VAE instead of GAN")
 flags.DEFINE_bool("pot", False, "Use VAE instead of GAN")
@@ -100,7 +100,7 @@ def main():
     opts['assignment'] = FLAGS.assignment
     opts['number_of_steps_made'] = 0
     opts['number_of_kGANs'] = 10
-    opts['kGANs_number_rounds'] = 100
+    opts['kGANs_number_rounds'] = 200
     opts['kill_threshold'] = 0.01 
     opts['annealed'] = True 
     if opts['verbose']:
