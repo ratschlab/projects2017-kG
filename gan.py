@@ -409,7 +409,9 @@ class ToyGan(Gan):
                     _ = self._session.run(
                         self._g_optim, feed_dict={self._noise_ph: batch_noise})
                 counter += 1
-                if opts['verbose'] and counter % opts['plot_every'] == 0:
+                if False and opts['verbose'] and counter % opts['plot_every'] == 0:
+                    import pdb
+                    pdb.set_trace()
                     metrics = Metrics()
                     points_to_plot = self._run_batch(
                         opts, self._G, self._noise_ph,
@@ -896,7 +898,7 @@ class ImageGan(Gan):
                                    self._is_training_ph: True})
                 counter += 1
 
-                if opts['verbose'] and counter % opts['plot_every'] == 0:
+                if False and opts['verbose'] and counter % opts['plot_every'] == 0:
                     logging.debug(
                         'Epoch: %d/%d, batch:%d/%d' % \
                         (_epoch+1, opts['gan_epoch_num'], _idx+1, batches_num))

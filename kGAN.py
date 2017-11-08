@@ -69,8 +69,10 @@ class KGANS(object):
             # initialize graph k
             self._graphs.append(tf.Graph())
             with self._graphs[it].as_default():
-                # initialize gan k
-                self._kGANs.append(gan_class(opts, data, self._data_weights[:,it]))
+                dev = it%opts['number_of_gpus']
+                with tf.device('/device:GPU:%d' %dev):
+                    # initialize gan k
+                    self._kGANs.append(gan_class(opts, data, self._data_weights[:,it]))
     
     def _kill_a_gan(self, opts, data, idx):
         opts['number_of_kGANs'] -= 1
@@ -81,17 +83,35 @@ class KGANS(object):
         del self._graphs[idx]
         del self._kGANs[idx]
 
-
+    def _internal_step(self, (opts, data, k)):
+        if self._mixture_weights[0][k] != 0:
+            with self._graphs[k].as_default():
+                self._kGANs[k].train(opts)
 
     def make_step(self, opts, data):
         """Make step of the kGAN algorithm. First train the GANs on the reweighted training set,
         then update the weights"""
+        
+        #from joblib import Parallel, delayed
+        #import multiprocessing
+        #Parallel(n_jobs=5)(delayed(self._internal_step)(opts, data, k) for k in (0,self._number_of_kGANs))
+        
+        
+        #import pdb
+        #pdb.set_trace()
+        from multiprocessing import Pool
+        from multiprocessing.dummy import Pool as ThreadPool
 
+        pool = ThreadPool(opts['number_of_gpus'])
+        job_args = [(opts, data, i) for i in range(0,self._number_of_kGANs)] 
+        pool.map(self._internal_step, job_args)
+        pool.close()
+        pool.join()
         # train the gans
-        for k in range (0,self._number_of_kGANs):
-            if self._mixture_weights[0][k] != 0:
-                with self._graphs[k].as_default():
-                    self._kGANs[k].train(opts)
+        #for k in range (0,self._number_of_kGANs):
+        #    if self._mixture_weights[0][k] != 0:
+        #        with self._graphs[k].as_default():
+        #            self._kGANs[k].train(opts)
         
         # update the weights
         if self._assignment == 'soft':
@@ -248,6 +268,21 @@ class KGANS(object):
         filename = opts['work_dir'] + '/tsne{:02d}.png'.format(opts['number_of_steps_made'])
         fig.savefig(filename)
         plt.close()
+
+    def _prob_data_under_gan_internal(self, (opts, data, k)):
+        device = k%opts['number_of_gpus']
+        # select gan k
+        gan_k = self._kGANs[k]
+        # discriminator output for training set 
+        D_k = self._get_prob_real_data(opts, gan_k, self._graphs[k], data, device)
+        # probability x_i given gan_j
+            
+        if self._assignment == 'soft':
+            p_k = self._data_weights[:,k]*np.transpose((1. - D_k)/(D_k + 1e-8))
+        elif self._assignment == 'hard':
+            p_k = 1./(self._data_num*self._mixture_weights[0][k])*np.transpose((1. - D_k)/(D_k + 1e-8))
+            
+        return p_k / p_k.sum(keepdims = True)
     
     def _prob_data_under_gan(self, opts, data):
         """compute p(x_train | gan j) for each gan and store it in self._prob_x_given_gan
@@ -256,34 +291,33 @@ class KGANS(object):
         (data.num_points, opts['number_of_kGANs']) NumPy array
             
         """
-        prob_x_given_gan = np.empty([data.num_points, opts['number_of_kGANs']])
-        for k in range (0,self._number_of_kGANs):
-            # select gan k
-            gan_k = self._kGANs[k]
-            # discriminator output for training set 
-            D_k = self._get_prob_real_data(opts, gan_k, self._graphs[k], data)
-            # probability x_i given gan_j
-            
-            if self._assignment == 'soft':
-                p_k = self._data_weights[:,k]*np.transpose((1. - D_k)/(D_k + 1e-8))
-            elif self._assignment == 'hard':
-                p_k = 1./(self._data_num*self._mixture_weights[0][k])*np.transpose((1. - D_k)/(D_k + 1e-8))
-            
-            p_k /= p_k.sum(keepdims = True)
-            prob_x_given_gan[:,k] = p_k
-        return prob_x_given_gan
+        #prob_x_given_gan = np.empty([data.num_points, opts['number_of_kGANs']])
+        #for k in range (0,self._number_of_kGANs):
+        from multiprocessing import Pool
+        from multiprocessing.dummy import Pool as ThreadPool
+        #import pdb
+        #pdb.set_trace()
+        pool = ThreadPool(opts['number_of_gpus'])
+        job_args = [(opts, data, i) for i in range(0,self._number_of_kGANs)] 
+        prob_x_given_gan = pool.map(self._prob_data_under_gan_internal, job_args)
+        pool.close()
+        pool.join()
+        #pdb.set_trace()
+        return np.transpose(np.squeeze(np.asarray(prob_x_given_gan)))
+        #return prob_x_given_gan
 
-    def _get_prob_real_data(self, opts, gan, graph, data):
+    def _get_prob_real_data(self, opts, gan, graph, data, device):
         """Train a classifier, separating true data from the current gan.
         Returns:
         (data.num_points,) NumPy array, containing probabilities of 
         true data. I.e., output of the sigmoid function. Create a graph and train a classifier"""
         g = tf.Graph()
         with g.as_default():
-            classifier = CLASSIFIER.ToyClassifier(opts, data)
-            num_fake_images = data.num_points
-            fake_images = gan.sample(opts, num_fake_images)
-            prob_real, prob_fake = classifier.train_mixture_discriminator(opts, fake_images)
+            with tf.device('/device:GPU:%d' %device):
+                classifier = CLASSIFIER.ToyClassifier(opts, data)
+                num_fake_images = data.num_points
+                fake_images = gan.sample(opts, num_fake_images)
+                prob_real, prob_fake = classifier.train_mixture_discriminator(opts, fake_images)
         return prob_real
 
 

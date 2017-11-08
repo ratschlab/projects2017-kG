@@ -28,7 +28,7 @@ flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]"
 flags.DEFINE_integer("zdim", 5, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.8, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights")
-flags.DEFINE_string("workdir", 'results_gmm', "Working directory ['results']")
+flags.DEFINE_string("workdir", 'results_gmm_par', "Working directory ['results']")
 flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
 flags.DEFINE_bool("is_bagging", False, "Do we want to use bagging instead of adagan? [False]")
 FLAGS = flags.FLAGS
@@ -43,7 +43,7 @@ def main():
     opts['trained_model_path'] = 'models'
     opts['mnist_trained_model_file'] = 'mnist_trainSteps_19999_yhat' # 'mnist_trainSteps_20000'
     opts['gmm_max_val'] = 15.
-    opts['toy_dataset_size'] = 128 * 1000 *3
+    opts['toy_dataset_size'] = 128 * 1000 *1
     opts['toy_dataset_dim'] = 2
     opts['mnist3_dataset_size'] = 2 * 64 # 64 * 2500
     opts['mnist3_to_channels'] = False # Hide 3 digits of MNIST to channels
@@ -67,7 +67,7 @@ def main():
     opts['tf_run_batch_size'] = 100
     opts['objective'] = 'JS'
 
-    opts['gmm_modes_num'] = 10
+    opts['gmm_modes_num'] = 5
     opts['latent_space_dim'] = FLAGS.zdim
     opts["gan_epoch_num"] = 5
     opts["mixture_c_epoch_num"] = 3#5
@@ -81,7 +81,7 @@ def main():
     opts['g_num_filters'] = 16
     opts['conv_filters_dim'] = 4
     opts["early_stop"] = -1 # set -1 to run normally
-    opts["plot_every"] = 500 # set -1 to run normally
+    opts["plot_every"] = -1 # set -1 to run normally
     opts["eval_points_num"] = 1000 # 25600
     opts['digit_classification_threshold'] = 0.999
     opts['inverse_metric'] = False # Use metric from the Unrolled GAN paper?
@@ -90,7 +90,7 @@ def main():
     opts['plot_kGANs'] = False
     opts['assignment'] = FLAGS.assignment
     opts['number_of_steps_made'] = 0
-    opts['number_of_kGANs'] = 15
+    opts['number_of_kGANs'] = 5
     opts['kGANs_number_rounds'] = 20
     opts['kill_threshold'] = 0.01
     opts['annealed'] = True
@@ -105,7 +105,7 @@ def main():
             text.write('%s : %s\n' % (key, opts[key]))
     
     print opts['work_dir']
-
+    
     data = DataHandler(opts)
     assert data.num_points >= opts['batch_size'], 'Training set too small'
     num = data.num_points
