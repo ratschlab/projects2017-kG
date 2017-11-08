@@ -33,6 +33,13 @@ flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
 flags.DEFINE_bool("is_bagging", False, "Do we want to use bagging instead of adagan? [False]")
 FLAGS = flags.FLAGS
 
+from tensorflow.python.client import device_lib
+
+def get_available_gpus():
+    local_device_protos = device_lib.list_local_devices()
+    return [x.name for x in local_device_protos if x.device_type == 'GPU']
+
+
 def main():
     opts = {}
     opts['random_seed'] = 821
@@ -69,8 +76,8 @@ def main():
 
     opts['gmm_modes_num'] = 5
     opts['latent_space_dim'] = FLAGS.zdim
-    opts["gan_epoch_num"] = 5
-    opts["mixture_c_epoch_num"] = 3#5
+    opts["gan_epoch_num"] = 1
+    opts["mixture_c_epoch_num"] = 5
     opts['opt_learning_rate'] = FLAGS.learning_rate
     opts['opt_d_learning_rate'] = FLAGS.d_learning_rate
     opts['opt_g_learning_rate'] = FLAGS.g_learning_rate
@@ -91,9 +98,11 @@ def main():
     opts['assignment'] = FLAGS.assignment
     opts['number_of_steps_made'] = 0
     opts['number_of_kGANs'] = 5
-    opts['kGANs_number_rounds'] = 20
+    opts['kGANs_number_rounds'] = 200
     opts['kill_threshold'] = 0.01
     opts['annealed'] = True
+    opts['number_of_gpus'] = len(get_available_gpus())
+    
     if opts['verbose']:
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s')
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
