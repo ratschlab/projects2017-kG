@@ -11,3 +11,7 @@ results*/
 .vimtmp
 
 mnist/
+
+*.pyc
+
+gan.pyc
