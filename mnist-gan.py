@@ -26,12 +26,20 @@ flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]"
 flags.DEFINE_integer("zdim", 8, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.01, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights")
-flags.DEFINE_string("workdir", 'results_mnist_soft_1_epoch_per_gan', "Working directory ['results']")
+flags.DEFINE_string("workdir", 'results_mnist_soft_new', "Working directory ['results']")
 flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
 flags.DEFINE_bool("vae", False, "Use VAE instead of GAN")
 flags.DEFINE_bool("pot", False, "Use VAE instead of GAN")
 flags.DEFINE_bool("is_bagging", False, "Do we want to use bagging instead of adagan? [False]")
 FLAGS = flags.FLAGS
+
+
+from tensorflow.python.client import device_lib
+
+def get_available_gpus():
+    local_device_protos = device_lib.list_local_devices()
+    return [x.name for x in local_device_protos if x.device_type == 'GPU']
+
 
 def main():
     opts = {}
@@ -100,9 +108,11 @@ def main():
     opts['assignment'] = FLAGS.assignment
     opts['number_of_steps_made'] = 0
     opts['number_of_kGANs'] = 10
-    opts['kGANs_number_rounds'] = 100
+    opts['kGANs_number_rounds'] = 200
     opts['kill_threshold'] = 0.01 
     opts['annealed'] = True 
+    opts['number_of_gpus'] = len(get_available_gpus())
+
     if opts['verbose']:
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s')
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
@@ -126,7 +136,6 @@ def main():
     random_idx = np.random.choice(train_size, 4*320, replace=False)
     metrics.make_plots(opts, 0, data.data,
             data.data[random_idx], kG._data_weights, prefix='dataset_')
-    
     
     
     for step in range(opts["kGANs_number_rounds"]):

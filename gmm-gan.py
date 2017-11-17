@@ -28,10 +28,17 @@ flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]"
 flags.DEFINE_integer("zdim", 5, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.8, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights")
-flags.DEFINE_string("workdir", 'results_gmm', "Working directory ['results']")
+flags.DEFINE_string("workdir", 'results_gmm_par_9', "Working directory ['results']")
 flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
 flags.DEFINE_bool("is_bagging", False, "Do we want to use bagging instead of adagan? [False]")
 FLAGS = flags.FLAGS
+
+from tensorflow.python.client import device_lib
+
+def get_available_gpus():
+    local_device_protos = device_lib.list_local_devices()
+    return [x.name for x in local_device_protos if x.device_type == 'GPU']
+
 
 def main():
     opts = {}
@@ -43,7 +50,7 @@ def main():
     opts['trained_model_path'] = 'models'
     opts['mnist_trained_model_file'] = 'mnist_trainSteps_19999_yhat' # 'mnist_trainSteps_20000'
     opts['gmm_max_val'] = 15.
-    opts['toy_dataset_size'] = 128 * 1000 *3
+    opts['toy_dataset_size'] = 128 * 1000 *2
     opts['toy_dataset_dim'] = 2
     opts['mnist3_dataset_size'] = 2 * 64 # 64 * 2500
     opts['mnist3_to_channels'] = False # Hide 3 digits of MNIST to channels
@@ -59,18 +66,19 @@ def main():
     opts["init_std"] = FLAGS.init_std
     opts["init_bias"] = 0.0
     opts['latent_space_distr'] = 'normal' # uniform, normal
-    opts['optimizer'] = 'sgd' # sgd, adam
-    opts["batch_size"] = 128#256
+    opts['optimizer'] = 'adam' # sgd, adam
+    opts["batch_size"] = 32#256
+    opts["batch_size_classifier"] = 128
     opts["d_steps"] = 1
-    opts["g_steps"] = 1
+    opts["g_steps"] = 2
     opts["verbose"] = True
     opts['tf_run_batch_size'] = 100
     opts['objective'] = 'JS'
 
-    opts['gmm_modes_num'] = 10
+    opts['gmm_modes_num'] = 16
     opts['latent_space_dim'] = FLAGS.zdim
     opts["gan_epoch_num"] = 1
-    opts["mixture_c_epoch_num"] = 3#5
+    opts["mixture_c_epoch_num"] = 2
     opts['opt_learning_rate'] = FLAGS.learning_rate
     opts['opt_d_learning_rate'] = FLAGS.d_learning_rate
     opts['opt_g_learning_rate'] = FLAGS.g_learning_rate
@@ -81,7 +89,7 @@ def main():
     opts['g_num_filters'] = 16
     opts['conv_filters_dim'] = 4
     opts["early_stop"] = -1 # set -1 to run normally
-    opts["plot_every"] = 500 # set -1 to run normally
+    opts["plot_every"] = -1 # set -1 to run normally
     opts["eval_points_num"] = 1000 # 25600
     opts['digit_classification_threshold'] = 0.999
     opts['inverse_metric'] = False # Use metric from the Unrolled GAN paper?
@@ -90,10 +98,12 @@ def main():
     opts['plot_kGANs'] = False
     opts['assignment'] = FLAGS.assignment
     opts['number_of_steps_made'] = 0
-    opts['number_of_kGANs'] = 15
-    opts['kGANs_number_rounds'] = 20
-    opts['kill_threshold'] = 0.01
+    opts['number_of_kGANs'] = 16
+    opts['kGANs_number_rounds'] = 100
+    opts['kill_threshold'] = 0.0005
     opts['annealed'] = True
+    opts['number_of_gpus'] = len(get_available_gpus())
+    
     if opts['verbose']:
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s')
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
@@ -105,7 +115,7 @@ def main():
             text.write('%s : %s\n' % (key, opts[key]))
     
     print opts['work_dir']
-
+    
     data = DataHandler(opts)
     assert data.num_points >= opts['batch_size'], 'Training set too small'
     num = data.num_points
@@ -121,17 +131,17 @@ def main():
         kG.make_step(opts, data)
         num_fake = opts['eval_points_num']
         logging.debug('Sampling fake points')
-        num_fake_points = 2000
+        num_fake_points = 500
         fake_points, num_samples_gans = kG.sample_mixture_separate_color(opts, num_fake_points)
         logging.debug('Sampling more fake points')
         
-        
+        opts["gan_epoch_num"] = 1
         more_fake_points = kG.sample_mixture(opts, 500)
 
         logging.debug('Plotting results')
         opts['plot_kGANs'] = True
         
-        metrics.make_plots(opts, step, data.data,#[:500],
+        metrics.make_plots(opts, step, data.data[:500],
                 fake_points, weights = num_samples_gans)
         
         (likelihood, C) = metrics.evaluate(

@@ -24,21 +24,23 @@ class Classifier(object):
     importance sampling of minibatches during the training. All the
     methods should be implemented in the subclasses.
     """
-    def __init__(self, opts, data):
+    def __init__(self, opts, data, labels):
 
         # Create a new session with session.graph = default graph
         self._session = tf.Session()
         self._trained = False
         self._data = data
+        self._labels = labels
         # Placeholders
         self._real_points_ph = None
         self._fake_points_ph = None
         self._noise_ph = None
+        self._labels_ph = None
         self._c_loss = None # Loss of mixture discriminator
         self._c_training = None # Outputs of the mixture discriminator on data
 
         self._c_optim = None
-
+        self._number_classes = labels.shape[1]
         with self._session.as_default(), self._session.graph.as_default():
             logging.debug('Building the graph...')
             self._build_model_internal(opts)
@@ -159,7 +161,7 @@ class ToyClassifier(Classifier):
             h0 = tf.nn.relu(h0)
             h1 = ops.linear(opts, h0, 500, 'h1_lin')
             h1 = tf.nn.relu(h1)
-            h2 = ops.linear(opts, h1, 1, 'h2_lin')
+            h2 = ops.linear(opts, h1, self._number_classes, 'h2_lin')
 
         return h2
 
@@ -168,31 +170,24 @@ class ToyClassifier(Classifier):
 
         """
         data_shape = self._data.data_shape
-
         # Placeholders
         real_points_ph = tf.placeholder(
             tf.float32, [None] + list(data_shape), name='real_points_ph')
         fake_points_ph = tf.placeholder(
-            tf.float32, [None] + list(data_shape), name='fake_points_ph')
-        noise_ph = tf.placeholder(
-            tf.float32, [None] + [opts['latent_space_dim']], name='noise_ph')
+            tf.float32, [None] + list(data_shape), name='real_points_ph')
+        labels_ph = tf.placeholder(
+            tf.float32, [None, self._number_classes], name='fake_points_ph')
 
         # Operations
-
-        c_logits_real = self.discriminator(
-            opts, real_points_ph, prefix='CLASSIFIER')
-        c_logits_fake = self.discriminator(
-            opts, fake_points_ph, prefix='CLASSIFIER', reuse=True)
-        c_training = tf.nn.sigmoid(
+        c_logits_fake  = self.discriminator(
+            opts, fake_points_ph, prefix='CLASSIFIER')
+        
+        c_training = tf.nn.softmax(
             self.discriminator(opts, real_points_ph, prefix='CLASSIFIER', reuse=True))
         
-        c_loss_real = tf.reduce_mean(
+        c_loss = tf.reduce_mean(
             tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=c_logits_real, labels=tf.ones_like(c_logits_real)))
-        c_loss_fake = tf.reduce_mean(
-            tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=c_logits_fake, labels=tf.zeros_like(c_logits_fake)))
-        c_loss = c_loss_real + c_loss_fake
+                logits=c_logits_fake, labels=labels_ph))
 
         t_vars = tf.trainable_variables()
         c_vars = [var for var in t_vars if 'CLASSIFIER/' in var.name]
@@ -200,8 +195,7 @@ class ToyClassifier(Classifier):
 
         self._real_points_ph = real_points_ph
         self._fake_points_ph = fake_points_ph
-        self._noise_ph = noise_ph
-
+        self._labels_ph = labels_ph
         self._c_loss = c_loss
         self._c_training = c_training
         self._c_optim = c_optim
@@ -214,19 +208,26 @@ class ToyClassifier(Classifier):
 
         batches_num = self._data.num_points / opts['batch_size']
         logging.debug('Training a mixture discriminator')
-        for epoch in xrange(opts["mixture_c_epoch_num"]):
+        loss = np.zeros(opts["mixture_c_epoch_num"])
+        loss[0] = self._session.run(self._c_loss, feed_dict={self._labels_ph: self._labels,self._fake_points_ph: fake_images})
+        epoch = 0
+        while np.std(loss)>0.003 or epoch <= opts["mixture_c_epoch_num"]:
+            epoch +=1
+        #for epoch in xrange(opts["mixture_c_epoch_num"]):
             for idx in xrange(batches_num):
-                ids = np.random.choice(len(fake_images), opts['batch_size_classifier'],
+                ids = np.random.choice(len(fake_images), opts['batch_size'],
                                        replace=False)
                 batch_fake_images = fake_images[ids]
-                ids = np.random.choice(self._data.num_points, opts['batch_size_classifier'],
-                                       replace=False)
-                batch_real_images = self._data.data[ids]
+                #ids = np.random.choice(self._data.num_points, opts['batch_size'],
+                #                       replace=False)
+                #batch_real_images = self._data.data[ids, :]
+
+                batch_labels = self._labels[ids]
                 _ = self._session.run(
                     self._c_optim,
-                    feed_dict={self._real_points_ph: batch_real_images,
+                    feed_dict={self._labels_ph: batch_labels,
                                self._fake_points_ph: batch_fake_images})
-
+            loss[epoch%opts["mixture_c_epoch_num"]] = self._session.run(self._c_loss, feed_dict={self._labels_ph: self._labels,self._fake_points_ph: fake_images})
         res = self._run_batch(
             opts, self._c_training,
             self._real_points_ph, self._data.data)
@@ -239,12 +240,12 @@ class ImageClassifier(Classifier):
 
     """
 
-    def __init__(self, opts, data):
+    def __init__(self, opts, data, labels):
 
         # One more placeholder for batch norm
         self._is_training_ph = None
 
-        Classifier.__init__(self, opts, data)
+        Classifier.__init__(self, opts, data, labels)
 
     def discriminator(self, opts, input_, is_training,
                       prefix='DISCRIMINATOR', reuse=False):
@@ -263,7 +264,7 @@ class ImageClassifier(Classifier):
             h2 = ops.conv2d(opts, h1, num_filters * 4, scope='h2_conv')
             h2 = ops.batch_norm(opts, h2, is_training, reuse, scope='bn_layer3')
             h2 = ops.lrelu(h2)
-            h3 = ops.linear(opts, h2, 1, scope='h3_lin')
+            h3 = ops.linear(opts, h2, opts['number_of_kGANs']+1, scope='h3_lin')
 
         return h3
 
@@ -277,60 +278,30 @@ class ImageClassifier(Classifier):
         real_points_ph = tf.placeholder(
             tf.float32, [None] + list(data_shape), name='real_points_ph')
         fake_points_ph = tf.placeholder(
-            tf.float32, [None] + list(data_shape), name='fake_points_ph')
-        noise_ph = tf.placeholder(
-            tf.float32, [None] + [opts['latent_space_dim']], name='noise_ph')
+            tf.float32, [None] + list(data_shape), name='real_points_ph')
+        labels_ph = tf.placeholder(
+            tf.float32, [None, opts['number_of_kGANs']+1], name='fake_points_ph')
+        
         is_training_ph = tf.placeholder(tf.bool, name='is_train_ph')
 
-
         # Operations
-        # We use conv2d_transpose in the generator, which results in the
-        # output tensor of undefined shapes. However, we statically know
-        # the shape of the generator output, which is [-1, dim1, dim2, dim3]
-        # where (dim1, dim2, dim3) is given by self._data.data_shape
-
-        c_logits_real = self.discriminator(
-            opts, real_points_ph, is_training_ph, prefix='CLASSIFIER')
-        c_logits_fake = self.discriminator(
-            opts, fake_points_ph, is_training_ph, prefix='CLASSIFIER', reuse=True)
-        c_training = tf.nn.sigmoid(
-            self.discriminator(opts, real_points_ph, is_training_ph,
-                               prefix='CLASSIFIER', reuse=True))
-
-
-        c_loss_real = tf.reduce_mean(
+        c_logits_fake  = self.discriminator(
+            opts, fake_points_ph, is_training_ph, prefix='CLASSIFIER')
+        
+        c_training = tf.nn.softmax(
+            self.discriminator(opts, real_points_ph,is_training_ph, prefix='CLASSIFIER', reuse=True))
+        
+        c_loss = tf.reduce_mean(
             tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=c_logits_real, labels=tf.ones_like(c_logits_real)))
-        c_loss_fake = tf.reduce_mean(
-            tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=c_logits_fake, labels=tf.zeros_like(c_logits_fake)))
-        c_loss = c_loss_real + c_loss_fake
+                logits=c_logits_fake, labels=labels_ph))
 
         t_vars = tf.trainable_variables()
-
-        # d_optim_op = ops.optimizer(opts, 'd')
-        # g_optim_op = ops.optimizer(opts, 'g')
-
-        # def debug_grads(grad, var):
-        #     _grad =  tf.Print(
-        #         grad, # grads_and_vars,
-        #         [tf.global_norm([grad])], 
-        #         'Global grad norm of %s: ' % var.name)
-        #     return _grad, var
-
-        # d_grads_and_vars = [debug_grads(grad, var) for (grad, var) in \
-        #     d_optim_op.compute_gradients(d_loss, var_list=d_vars)]
-        # g_grads_and_vars = [debug_grads(grad, var) for (grad, var) in \
-        #     g_optim_op.compute_gradients(g_loss, var_list=g_vars)]
-        # d_optim = d_optim_op.apply_gradients(d_grads_and_vars)
-        # g_optim = g_optim_op.apply_gradients(g_grads_and_vars)
-
         c_vars = [var for var in t_vars if 'CLASSIFIER/' in var.name]
         c_optim = ops.optimizer(opts).minimize(c_loss, var_list=c_vars)
 
         self._real_points_ph = real_points_ph
         self._fake_points_ph = fake_points_ph
-        self._noise_ph = noise_ph
+        self._labels_ph = labels_ph
         self._is_training_ph = is_training_ph
         self._c_loss = c_loss
         self._c_training = c_training
@@ -339,91 +310,28 @@ class ImageClassifier(Classifier):
         logging.debug("Building Graph Done.")
 
 
-    def _train_internal(self, opts):
-        """Train a GAN model.
-
-        """
-
-        batches_num = self._data.num_points / opts['batch_size']
-        train_size = self._data.num_points
-
-        counter = 0
-        logging.debug('Training GAN')
-        for _epoch in xrange(opts["gan_epoch_num"]):
-            for _idx in xrange(batches_num):
-                # logging.debug('Step %d of %d' % (_idx, batches_num ) )
-                data_ids = np.random.choice(train_size, opts['batch_size'],
-                                            replace=False, p=self._data_weights)
-                batch_images = self._data.data[data_ids].astype(np.float)
-                batch_noise = utils.generate_noise(opts, opts['batch_size'])
-                # Update discriminator parameters
-                for _iter in xrange(opts['d_steps']):
-                    _ = self._session.run(
-                        self._d_optim,
-                        feed_dict={self._real_points_ph: batch_images,
-                                   self._noise_ph: batch_noise,
-                                   self._is_training_ph: True})
-                # Update generator parameters
-                for _iter in xrange(opts['g_steps']):
-                    _ = self._session.run(
-                        self._g_optim,
-                        feed_dict={self._noise_ph: batch_noise,
-                                   self._is_training_ph: True})
-                counter += 1
-
-                if opts['verbose'] and counter % opts['plot_every'] == 0:
-                    logging.debug(
-                        'Epoch: %d/%d, batch:%d/%d' % \
-                        (_epoch+1, opts['gan_epoch_num'], _idx+1, batches_num))
-                    metrics = Metrics()
-                    points_to_plot = self._run_batch(
-                        opts, self._G, self._noise_ph,
-                        self._noise_for_plots[0:320],
-                        self._is_training_ph, False)
-                    metrics.make_plots(
-                        opts,
-                        counter,
-                        None,
-                        points_to_plot,
-                        prefix='sample_e%04d_mb%05d_' % (_epoch, _idx))
-                if opts['early_stop'] > 0 and counter > opts['early_stop']:
-                    break
-
-    def _sample_internal(self, opts, num):
-        """Sample from the trained GAN model.
-
-        """
-        noise = utils.generate_noise(opts, num)
-        sample = self._run_batch(
-            opts, self._G, self._noise_ph, noise,
-            self._is_training_ph, False)
-        # sample = self._session.run(
-        #     self._G, feed_dict={self._noise_ph: noise})
-        return sample
-
     def _train_mixture_discriminator_internal(self, opts, fake_images):
         """Train a classifier separating true data from points in fake_images.
 
         """
 
         batches_num = self._data.num_points / opts['batch_size']
-        logging.debug('Training a mixture discriminator')
-        logging.debug('Using %d real points and %d fake ones' %\
-                      (self._data.num_points, len(fake_images)))
+        
         for epoch in xrange(opts["mixture_c_epoch_num"]):
             for idx in xrange(batches_num):
                 ids = np.random.choice(len(fake_images), opts['batch_size'],
                                        replace=False)
                 batch_fake_images = fake_images[ids]
-                ids = np.random.choice(self._data.num_points, opts['batch_size'],
-                                       replace=False)
-                batch_real_images = self._data.data[ids]
+                #ids = np.random.choice(self._data.num_points, opts['batch_size'],
+                #                       replace=False)
+                batch_labels = self._labels[ids]
                 _ = self._session.run(
                     self._c_optim,
-                    feed_dict={self._real_points_ph: batch_real_images,
+                    feed_dict={self._labels_ph: batch_labels,
                                self._fake_points_ph: batch_fake_images,
                                self._is_training_ph: True})
 
+        
         # Evaluating trained classifier on real points
         res = self._run_batch(
             opts, self._c_training,

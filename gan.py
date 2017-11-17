@@ -333,6 +333,8 @@ class ToyGan(Gan):
 
         d_logits_real = self.discriminator(opts, real_points_ph)
         d_logits_fake = self.discriminator(opts, G, reuse=True)
+        d_training = tf.nn.sigmoid(
+                self.discriminator(opts, real_points_ph, reuse = True))
 
         c_logits_real = self.discriminator(
             opts, real_points_ph, prefix='CLASSIFIER')
@@ -381,7 +383,7 @@ class ToyGan(Gan):
         self._g_optim = g_optim
         self._d_optim = d_optim
         self._c_optim = c_optim
-
+        self._d_training = d_training
     def _train_internal(self, opts):
         """Train a GAN model.
 
@@ -409,7 +411,9 @@ class ToyGan(Gan):
                     _ = self._session.run(
                         self._g_optim, feed_dict={self._noise_ph: batch_noise})
                 counter += 1
-                if opts['verbose'] and counter % opts['plot_every'] == 0:
+                if False and opts['verbose'] and counter % opts['plot_every'] == 0:
+                    import pdb
+                    pdb.set_trace()
                     metrics = Metrics()
                     points_to_plot = self._run_batch(
                         opts, self._G, self._noise_ph,
@@ -423,7 +427,9 @@ class ToyGan(Gan):
                         points_to_plot,
                         prefix='sample_e%04d_mb%05d_' % (_epoch, _idx))
 
-
+        self.d_softmax_real  = self._run_batch(
+                                     opts, self._d_training,
+                                     self._real_points_ph, self._data.data)
 
     def _sample_internal(self, opts, num):
         """Sample from the trained GAN model.
@@ -896,7 +902,7 @@ class ImageGan(Gan):
                                    self._is_training_ph: True})
                 counter += 1
 
-                if opts['verbose'] and counter % opts['plot_every'] == 0:
+                if False and opts['verbose'] and counter % opts['plot_every'] == 0:
                     logging.debug(
                         'Epoch: %d/%d, batch:%d/%d' % \
                         (_epoch+1, opts['gan_epoch_num'], _idx+1, batches_num))
