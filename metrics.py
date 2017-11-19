@@ -473,7 +473,7 @@ class Metrics(object):
 
         #plt.scatter(fake[weights[len(weights)-1]:, 0], fake[weights[len(weights)-1]:, 1], color=colors[len(weights)], alpha=0.2, s=20, label='fake%d' %(len(weights)))
         plt.legend(loc='upper left')
-        filename = prefix + 'mixture{:02d}.png'.format(step)
+        filename = prefix + 'mixture{:03d}.png'.format(step)
         utils.create_dir(opts['work_dir'])
         plt.savefig(utils.o_gfile((opts["work_dir"], filename), 'wb'),
                     format='png')
@@ -508,7 +508,7 @@ class Metrics(object):
             weights_srt = weights_srt / np.max(weights_srt) * max_pdf * 0.8
             plt.plot(real_points_srt, weights_srt, lw=3, color='green', label='weights')
         plt.legend(loc='upper left')
-        filename = prefix + 'mixture{:02d}.png'.format(step)
+        filename = prefix + 'mixture{:03d}.png'.format(step)
         utils.create_dir(opts['work_dir'])
         plt.savefig(utils.o_gfile((opts["work_dir"], filename), 'wb'),
                     format='png')

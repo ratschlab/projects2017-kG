@@ -49,7 +49,7 @@ class Gan(object):
         self._true_data_discriminator = None
         # Variables
         self._inv_z = None
-
+        self.d_softmax_real = None
         # Optimizers
         self._g_optim = None
         self._d_optim = None
@@ -798,7 +798,9 @@ class ImageGan(Gan):
 
         d_logits_real = self.discriminator(opts, real_points_ph, is_training_ph)
         d_logits_fake = self.discriminator(opts, G, is_training_ph, reuse=True)
-
+        d_training = tf.nn.sigmoid(
+                self.discriminator(opts, real_points_ph, False, reuse = True))
+        
         c_logits_real = self.discriminator(
             opts, real_points_ph, is_training_ph, prefix='CLASSIFIER')
         c_logits_fake = self.discriminator(
@@ -867,6 +869,7 @@ class ImageGan(Gan):
         self._d_optim = d_optim
         self._c_optim = c_optim
 
+        self._d_training = d_training
         logging.debug("Building Graph Done.")
 
 
@@ -920,6 +923,11 @@ class ImageGan(Gan):
                 if opts['early_stop'] > 0 and counter > opts['early_stop']:
                     break
 
+        self.d_softmax_real  = self._run_batch(
+                                     opts, self._d_training,
+                                     self._real_points_ph, self._data.data)
+    
+        
     def _sample_internal(self, opts, num):
         """Sample from the trained GAN model.
 

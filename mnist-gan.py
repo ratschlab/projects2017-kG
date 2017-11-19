@@ -26,11 +26,11 @@ flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]"
 flags.DEFINE_integer("zdim", 8, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.01, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights")
-flags.DEFINE_string("workdir", 'results_mnist_soft_new', "Working directory ['results']")
-flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
-flags.DEFINE_bool("vae", False, "Use VAE instead of GAN")
-flags.DEFINE_bool("pot", False, "Use VAE instead of GAN")
-flags.DEFINE_bool("is_bagging", False, "Do we want to use bagging instead of adagan? [False]")
+flags.DEFINE_string("workdir", 'results_mnist200', "Working directory ['results']")
+#flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
+#flags.DEFINE_bool("vae", False, "Use VAE instead of GAN")
+#flags.DEFINE_bool("pot", False, "Use VAE instead of GAN")
+#flags.DEFINE_bool("is_bagging", False, "Do we want to use bagging instead of adagan? [False]")
 FLAGS = flags.FLAGS
 
 
@@ -45,27 +45,27 @@ def main():
     opts = {}
     opts['random_seed'] = 66
     opts['dataset'] = 'mnist' # gmm, circle_gmm,  mnist, mnist3 ...
-    opts['conditional'] = False
-    opts['unrolled'] = FLAGS.unrolled # Use Unrolled GAN? (only for images)
-    opts['unrolling_steps'] = 5 # Used only if unrolled = True
+ #   opts['conditional'] = False
+ #   opts['unrolled'] = FLAGS.unrolled # Use Unrolled GAN? (only for images)
+ #   opts['unrolling_steps'] = 5 # Used only if unrolled = True
     opts['data_dir'] = 'mnist'
     opts['trained_model_path'] = 'models'
     opts['mnist_trained_model_file'] = 'mnist_trainSteps_19999_yhat' # 'mnist_trainSteps_20000'
-    opts['gmm_max_val'] = 15.
-    opts['toy_dataset_size'] = 10000
-    opts['toy_dataset_dim'] = 2
-    opts['mnist3_dataset_size'] = 2 * 64 # 64 * 2500
-    opts['mnist3_to_channels'] = False # Hide 3 digits of MNIST to channels
+#    opts['gmm_max_val'] = 15.
+#    opts['toy_dataset_size'] = 10000
+#    opts['toy_dataset_dim'] = 2
+#    opts['mnist3_dataset_size'] = 2 * 64 # 64 * 2500
+#    opts['mnist3_to_channels'] = False # Hide 3 digits of MNIST to channels
     opts['input_normalize_sym'] = False # Normalize data to [-1, 1]
-    opts['adagan_steps_total'] = 1
+#    opts['adagan_steps_total'] = 1
     opts['samples_per_component'] = 5000
     opts['work_dir'] = FLAGS.workdir
     opts['ckpt_dir'] = 'checkpoints'
-    opts['is_bagging'] = FLAGS.is_bagging
-    opts['beta_heur'] = 'uniform' # uniform, constant
-    opts['weights_heur'] = 'theory_star' # theory_star, theory_dagger, topk
-    opts['beta_constant'] = 0.5
-    opts['topk_constant'] = 0.5
+#    opts['is_bagging'] = FLAGS.is_bagging
+#    opts['beta_heur'] = 'uniform' # uniform, constant
+#    opts['weights_heur'] = 'theory_star' # theory_star, theory_dagger, topk
+#    opts['beta_constant'] = 0.5
+#    opts['topk_constant'] = 0.5
     opts["init_std"] = FLAGS.init_std
     opts["init_bias"] = 0.0
     opts['latent_space_distr'] = 'normal' # uniform, normal
@@ -76,10 +76,10 @@ def main():
     opts["verbose"] = True
     opts['tf_run_batch_size'] = 128
 
-    opts['gmm_modes_num'] = 5
+#    opts['gmm_modes_num'] = 5
     opts['latent_space_dim'] = FLAGS.zdim
     opts["gan_epoch_num"] = 1
-    opts["mixture_c_epoch_num"] = 5
+#    opts["mixture_c_epoch_num"] = 5
     opts['opt_learning_rate'] = FLAGS.learning_rate
     opts['opt_d_learning_rate'] = FLAGS.d_learning_rate
     opts['opt_g_learning_rate'] = FLAGS.g_learning_rate
@@ -97,21 +97,22 @@ def main():
     opts['inverse_metric'] = False # Use metric from the Unrolled GAN paper?
     opts['inverse_num'] = 100 # Number of real points to inverse.
     opts['objective'] = None
-    opts['vae'] = FLAGS.vae
-    opts['pot'] = FLAGS.pot
-    opts['pot_pz_std'] = 2
-    opts['vae_sigma'] = 0.01
-    opts['pot_lambda'] = 10
-    opts['convolutions'] = False
+#    opts['vae'] = FLAGS.vae
+#    opts['pot'] = FLAGS.pot
+#    opts['pot_pz_std'] = 2
+#    opts['vae_sigma'] = 0.01
+#    opts['pot_lambda'] = 10
+#    opts['convolutions'] = False
 
     opts['plot_kGANs'] = False
     opts['assignment'] = FLAGS.assignment
     opts['number_of_steps_made'] = 0
     opts['number_of_kGANs'] = 10
-    opts['kGANs_number_rounds'] = 200
-    opts['kill_threshold'] = 0.01 
+    opts['kGANs_number_rounds'] = 500
+    opts['kill_threshold'] = 0.001 
     opts['annealed'] = True 
     opts['number_of_gpus'] = len(get_available_gpus())
+    opts['reinitialize'] = True
 
     if opts['verbose']:
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s')

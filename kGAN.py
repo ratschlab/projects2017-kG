@@ -14,8 +14,9 @@ import gan as GAN
 from utils import ArraySaver
 from metrics import Metrics
 import utils
-import multiclassifier as MULTICLASSIFIER
-import classifier as CLASSIFIER
+
+from multiprocessing import Pool
+from multiprocessing.dummy import Pool as ThreadPool
 
 class KGANS(object):
     """This class implements the kGAN meta-algorithm.
@@ -54,12 +55,8 @@ class KGANS(object):
         gan_class = None
         if opts['dataset'] in ('gmm'):
             gan_class = GAN.ToyGan
-            self._classifier = CLASSIFIER.ToyClassifier
-            self._multiclassifier = MULTICLASSIFIER.ToyClassifier
         elif opts['dataset'] in pic_datasets:
             gan_class = GAN.ImageGan
-            self._classifier = CLASSIFIER.ImageClassifier
-            self._multiclassifier = MULTICLASSIFIER.ImageClassifier
         else:
             assert False, "We don't have any other GAN implementation yet..."
         
@@ -86,6 +83,13 @@ class KGANS(object):
         del self._graphs[idx]
         del self._kGANs[idx]
 
+    def _re_initialize(self, opts, data, idx):
+        self._graphs[idx] = tf.Graph()
+        with self._graphs[idx].as_default():
+            dev = it%opts['number_of_gpus']
+            with tf.device('/device:GPU:%d' %dev):
+                self._kGAN[idx] = gan_class(opts, data, self._data_weights[:,idx])
+
     def _internal_step(self, (opts, data, k)):
         if self._mixture_weights[0][k] != 0:
             with self._graphs[k].as_default():
@@ -95,44 +99,33 @@ class KGANS(object):
         """Make step of the kGAN algorithm. First train the GANs on the reweighted training set,
         then update the weights"""
         
-        #from joblib import Parallel, delayed
-        #import multiprocessing
-        #Parallel(n_jobs=5)(delayed(self._internal_step)(opts, data, k) for k in (0,self._number_of_kGANs))
-        
-        
-        #import pdb
-        #pdb.set_trace()
-        from multiprocessing import Pool
-        from multiprocessing.dummy import Pool as ThreadPool
-
         pool = ThreadPool(opts['number_of_gpus'])
         job_args = [(opts, data, i) for i in range(0,self._number_of_kGANs)] 
         pool.map(self._internal_step, job_args)
         pool.close()
         pool.join()
-        # train the gans
-        #for k in range (0,self._number_of_kGANs):
-        #    if self._mixture_weights[0][k] != 0:
-        #        with self._graphs[k].as_default():
-        #            self._kGANs[k].train(opts)
-        
-        # update the weights
         if self._assignment == 'soft':
-            #self._update_data_weights_multiclass(opts, data)
-            self._update_data_weights_soft_old(opts, data)
+            self._update_data_weights_soft(opts, data)
         elif self._assignment == 'hard':
             self._update_data_weights_hard(opts, data)
         killed = False
-        while (np.where(self._mixture_weights[0] < opts['kill_threshold'])[0].size!= 0):
-            idx_to_kill = np.argmin(self._mixture_weights[0])
-            self._kill_a_gan(opts, data, idx_to_kill)
-            killed = True
-        if killed:
-            if self._assignment == 'soft':
-                #self._update_data_weights_soft(opts, data)
-                self._update_data_weights_soft_old(opts, data)
-            elif self._assignment == 'hard':
-                self._update_data_weights_hard(opts, data)
+        if opts['reinitialize']:
+            while (np.where(self._mixture_weights[0] < opts['kill_threshold'])[0].size!= 0):
+                idx_to_reinitialize = np.argmin(self._mixture_weights[0])
+                self._re_initialize(opts, data, idx_to_reinitialize)
+        else:
+            while (np.where(self._mixture_weights[0] < opts['kill_threshold'])[0].size!= 0):
+                idx_to_kill = np.argmin(self._mixture_weights[0])
+                self._kill_a_gan(opts, data, idx_to_kill)
+                killed = True
+            if killed:
+                if self._assignment == 'soft':
+                    self._update_data_weights_soft(opts, data)
+                elif self._assignment == 'hard':
+                    self._update_data_weights_hard(opts, data)
+        
+        
+        
         if np.abs(np.sum(self._mixture_weights)-1) > 0.001:
             assert np.abs(np.sum(self._mixture_weights)-1) <= 0.001, 'mixture weights dont sum to 1.. something went wrong'
 
@@ -152,55 +145,14 @@ class KGANS(object):
         self._data_weights = np.ones([self._data_num, opts['number_of_kGANs']])
         self._data_weights /= self._data_weights.sum(axis = 0, keepdims = True)
     
-    def _update_data_weights_multiclass(self, opts, data):
-        
-        num_fake_images = self._data_num
-        fake_images  = self.sample_mixture(opts, num_fake_images)
-        g = tf.Graph()
-        with g.as_default():
-            classifier = self._classifier(opts, data)
-            D0, prob_fake = classifier.train_mixture_discriminator(opts, fake_images)
-        
-        fake_images, labels = self.sample_mixture_labelled(opts, num_fake_images)
-        g = tf.Graph()
-        with g.as_default():
-            classifier = self._multiclassifier(opts, data,labels)
-            Dj, prob_fake = classifier.train_mixture_discriminator(opts, fake_images)
-        
-        pi = D0/opts["number_of_kGANs"] + (1.-D0)*Dj
-
-        self._mixture_weights = pi.sum(axis = 0, keepdims = True)
-        self._mixture_weights /= np.sum(self._mixture_weights)
-        print self._mixture_weights
-        
-        #_data_weights = pi/alpha
-        self._data_weights = pi #/ np.repeat(self._mixture_weights,self._data_weights.shape[0],axis = 0)
-        
-        # divide by N
-        self._data_weights /= self._data_weights.sum(axis = 0, keepdims = True)
-        
-        # update data weights in eahc gan for the importance sampling 
-        for k in range (0,self._number_of_kGANs):
-            self._kGANs[k]._data_weights = self._data_weights[:,k]
-        
-        #print plots
-        if (opts['dataset'] == 'gmm'):
-            self._plot_competition_2d(opts)
-        elif(opts['dataset'] == 'mnist'):
-            sampled = self._sample_from_training(opts,data, self._data_weights, 50)
-            metrics = Metrics()
-            metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  self._data_weights, prefix = "train")    
-            self.tsne_plotter(opts,  data)
     
-    def _update_data_weights_soft_old(self, opts, data):
+    def _update_data_weights_soft(self, opts, data):
         """ 
         update the data weights with the soft assignments for the kGAN object
         """
         # compute p(x | gan) 
-        prob_x_given_gan = self._prob_data_under_gan_k_classifier(opts, data)
-        #force uniform if no gan is taking the point
-        #normalization_over_gan = prob_x_given_gan.sum(axis = 1, keepdims = True)
-        #prob_x_given_gan[np.argwhere(normalization_over_gan == 0)] = 1.
+        prob_x_given_gan = self._prob_data_under_gan(opts, data)
+        
         # compute pi and alpha
         # pi_x(j) = 1/Z alpha_j p(x | g_j)
         annealing = 1.
@@ -234,49 +186,6 @@ class KGANS(object):
             metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  self._data_weights, prefix = "train")    
             self.tsne_plotter(opts,  data)
     
-    def _update_data_weights_soft(self, opts, data):
-        """ 
-        update the data weights with the soft assignments for the kGAN object
-        """
-        # compute p(x | gan)
-        pi = self._prob_data_under_gan(opts, data)
-        
-        #force uniform if no gan is taking the point
-        #normalization_over_gan = prob_x_given_gan.sum(axis = 1, keepdims = True)
-        #prob_x_given_gan[np.argwhere(normalization_over_gan == 0)] = 1.
-        # compute pi and alpha
-        # pi_x(j) = 1/Z alpha_j p(x | g_j)
-        annealing = 1.
-        if opts['annealed']:
-            annealing = min(1.,(1. + 4.*opts['number_of_steps_made']*1.)/opts["kGANs_number_rounds"])
-        
-        
-        pi = np.power(pi, annealing)# + np.power((1./self._data_num),2) 
-        pi /= pi.sum(axis = 1, keepdims = True)
-        
-        # Compute Gan probability (Is it the prior I need to use computing the previous line?)
-        self._mixture_weights = pi.sum(axis = 0, keepdims = True)
-        self._mixture_weights /= np.sum(self._mixture_weights)
-        print self._mixture_weights
-        
-        #_data_weights = pi/alpha
-        self._data_weights = pi #/ np.repeat(self._mixture_weights,self._data_weights.shape[0],axis = 0)
-        
-        # divide by N
-        self._data_weights /= self._data_weights.sum(axis = 0, keepdims = True)
-        
-        # update data weights in eahc gan for the importance sampling 
-        for k in range (0,self._number_of_kGANs):
-            self._kGANs[k]._data_weights = self._data_weights[:,k]
-        
-        #print plots
-        if (opts['dataset'] == 'gmm'):
-            self._plot_competition_2d(opts)
-        elif(opts['dataset'] == 'mnist'):
-            sampled = self._sample_from_training(opts,data, self._data_weights, 50)
-            metrics = Metrics()
-            metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  self._data_weights, prefix = "train")    
-            self.tsne_plotter(opts,  data)
     
     def _update_data_weights_hard(self, opts, data):
         """ 
@@ -335,7 +244,7 @@ class KGANS(object):
     def tsne_plotter(self, opts,  data):
         """tsne plotter, not particularly interesting"""
         #return True 
-        sampled,labels = self._sample_from_training_gan_label(opts,data, self._data_weights, 50)
+        sampled,labels = self._sample_from_training_gan_label(opts,data, self._data_weights, 500)
         from sklearn.manifold import TSNE
         import matplotlib 
         matplotlib.use("Agg")
@@ -356,41 +265,17 @@ class KGANS(object):
         plt.close()
 
     def _prob_data_under_gan_internal(self, (opts, data, k)):
-        device = k%opts['number_of_gpus']
         # select gan k
-        gan_k = self._kGANs[k]
         # discriminator output for training set 
-        D_k = self._get_prob_real_data(opts, gan_k, self._graphs[k], data, device)
+        D_k = self._kGANs[k].d_softmax_real 
         # probability x_i given gan_j
             
         if self._assignment == 'soft':
-            p_k = self._data_weights[:,k]*np.transpose((1. - D_k)/(D_k + 1e-8)) + 1e-12
+            p_k = self._data_weights[:,k]*np.transpose((1. - D_k)/(D_k + 1e-12)) + 1e-12
         elif self._assignment == 'hard':
-            p_k = 1./(self._data_num*self._mixture_weights[0][k])*np.transpose((1. - D_k)/(D_k + 1e-8))
+            p_k = 1./(self._data_num*self._mixture_weights[0][k])*np.transpose((1. - D_k)/(D_k + 1e-12))
             
         return p_k / p_k.sum(keepdims = True)
-    
-    def _prob_data_under_gan_k_classifier(self, opts, data):
-        """compute p(x_train | gan j) for each gan and store it in self._prob_x_given_gan
-        Could be done more efficiently by appending columns to empty array
-        Returns:
-        (data.num_points, opts['number_of_kGANs']) NumPy array
-            
-        """
-        
-        #prob_x_given_gan = np.empty([data.num_points, opts['number_of_kGANs']])
-        #for k in range (0,self._number_of_kGANs):
-        from multiprocessing import Pool
-        from multiprocessing.dummy import Pool as ThreadPool
-        #import pdb
-        #pdb.set_trace()
-        pool = ThreadPool(opts['number_of_gpus'])
-        job_args = [(opts, data, i) for i in range(0,self._number_of_kGANs)] 
-        prob_x_given_gan = pool.map(self._prob_data_under_gan_internal, job_args)
-        pool.close()
-        pool.join()
-        #pdb.set_trace()
-        return np.transpose(np.squeeze(np.asarray(prob_x_given_gan)))
     
     def _prob_data_under_gan(self, opts, data):
         """compute p(x_train | gan j) for each gan and store it in self._prob_x_given_gan
@@ -399,61 +284,21 @@ class KGANS(object):
         (data.num_points, opts['number_of_kGANs']) NumPy array
             
         """
+        prob_x_given_gan = np.zeros(self._data_weights.shape)
+        for i in range(0,self._number_of_kGANs):
         
-        #num_fake_images = int(round(data.num_points/(opts['number_of_kGANs']+1)))
-        #fake_images, labels = self.sample_mixture_separate_uniform_labelled(opts, data,  num_fake_images)
-        num_fake_images = self._data_num
-        fake_images, labels = self.sample_data_mixture_labelled(opts, data,  num_fake_images)
-        g = tf.Graph()
-        with g.as_default():
-            classifier = self._multiclassifier(opts, data,labels)
-            prob_real, prob_fake = classifier.train_mixture_discriminator(opts, fake_images)
-        Dj = np.copy(prob_real[:,1:]) + 1e-12
-        Dj = self._data_weights*np.transpose((Dj)/(1.-Dj + 1e-8)) + 1e-12
-        
-        return Dj/Dj.sum(axis = 1, keepdims = True)
-        D0 = np.copy(prob_real[:,0])
-        #not_fooled_idx  = D0 >= np.max(Dj, axis = 1)
-        #Dj[not_fooled_idx,:] = 1.
+            D_k = self._kGANs[i].d_softmax_real 
+             # probability x_i given gan_j
+            
+            if self._assignment == 'soft':
+                p_k = self._data_weights[:,i]*np.transpose((1. - D_k)/(D_k + 1e-12)) + 1e-12
+            elif self._assignment == 'hard':
+                p_k = 1./(self._data_num*self._mixture_weights[0][i])*np.transpose((1. - D_k)/(D_k + 1e-12))
+            
+            prob_x_given_gan[:, i] =  p_k / p_k.sum(keepdims = True)
+        return prob_x_given_gan
 
-        #return Dj/Dj.sum(axis = 1, keepdims = True)
-        
-        D0mat = np.transpose(np.repeat([D0],opts['number_of_kGANs'], axis = 0))
-        rez = (1.-D0mat)*Dj + D0mat/opts['number_of_kGANs']
-        return rez/rez.sum(axis = 1, keepdims = True)
-        #prob_x_given_gan = np.empty([data.num_points, opts['number_of_kGANs']])
-        #for k in range (0,self._number_of_kGANs):
-        #from multiprocessing import Pool
-        #from multiprocessing.dummy import Pool as ThreadPool
-        #import pdb
-        #pdb.set_trace()
-        #pool = ThreadPool(opts['number_of_gpus'])
-        #job_args = [(opts, data, i) for i in range(0,self._number_of_kGANs)] 
-        #prob_x_given_gan = pool.map(self._prob_data_under_gan_internal, job_args)
-        #pool.close()
-        #pool.join()
-        #pdb.set_trace()
-        #return np.transpose(np.squeeze(np.asarray(prob_x_given_gan)))
-        #return prob_x_given_gan
-        #return prob_real
-
-    def _get_prob_real_data(self, opts, gan, graph, data, device):
-        """Train a classifier, separating true data from the current gan.
-        Returns:
-        (data.num_points,) NumPy array, containing probabilities of 
-        true data. I.e., output of the sigmoid function. Create a graph and train a classifier"""
-        return gan.d_softmax_real + 1e-12
-        
-        
-        
-        g = tf.Graph()
-        with g.as_default():
-            with tf.device('/device:GPU:%d' %device):
-                classifier = self._classifier(opts, data)
-                num_fake_images = data.num_points
-                fake_images = gan.sample(opts, num_fake_images)
-                prob_real, prob_fake = classifier.train_mixture_discriminator(opts, fake_images)
-        return prob_real
+    
 
 
     def _plot_competition_2d(self, opts):
@@ -474,30 +319,6 @@ class KGANS(object):
         plt.close()
 
 
-    def sample_mixture_labelled(self, opts, number_of_samples):
-        """sample from the mixture of generators and remember from which generator they come from"""
-        number_samples = [int(round(number_of_samples * self._mixture_weights.flatten()[0]))]
-        initialized = False
-        cnt = number_samples[0]
-        if number_samples[-1] != 0:
-            fake_samples = self._kGANs[0].sample(opts, number_samples[0])
-            initialized = True
-            labels = np.zeros(number_samples[-1])
-        for k in range(1,self._number_of_kGANs):
-            number_samples.append(int(np.ceil(number_of_samples * self._mixture_weights.flatten()[k])))
-            cnt += number_samples[-1]
-            if number_samples[-1] != 0:
-                if initialized:
-                    fake_samples = np.concatenate((fake_samples,self._kGANs[k].sample(opts, number_samples[k])),axis = 0)
-                    labels = np.append(labels, np.ones(number_samples[-1])*k)
-                else:
-                    fake_samples = self._kGANs[k].sample(opts, number_samples[k])
-                    initialized = True
-                    labels = np.ones(number_samples[-1])*k
-        
-        fake_samples = fake_samples[:number_of_samples ,:]
-        labels = labels[:number_of_samples]
-        return fake_samples, self._process_labels(opts, labels, number_of_samples)
 
 
     def sample_mixture_separate_color(self, opts, number_of_samples):
@@ -544,43 +365,6 @@ class KGANS(object):
             fake_samples = np.concatenate((fake_samples,self._kGANs[k].sample(opts, number_samples)),axis = 0)
         return fake_samples
     
-
-    def sample_data_mixture_labelled(self, opts, data, number_samples_total):
-        """sample same number of samples from each gan"""
-        real_data_ratio = 0.2
-        labels = np.zeros(int(number_samples_total*real_data_ratio))
-        ids = np.random.choice(self._data_num, int(number_samples_total*real_data_ratio), replace = False)
-        fake_samples = data.data[ids].astype(np.float)
-        number_samples_total *= 1. - real_data_ratio
-        for k in range(0,self._number_of_kGANs):
-            number_samples = int(np.ceil(number_samples_total * self._mixture_weights.flatten()[k]))
-            fake_samples = np.concatenate((fake_samples,self._kGANs[k].sample(opts, number_samples)),axis = 0)
-            labels = np.concatenate((labels,np.ones(number_samples)*(k+1)), axis = 0)
-        
-        
-        return fake_samples, self._process_labels(opts, labels, len(fake_samples))
-    
-    def sample_mixture_separate_uniform_labelled(self, opts, data, number_samples):
-        """sample same number of samples from each gan"""
-        labels = np.zeros(number_samples)
-        ids = np.random.choice(self._data_num, number_samples, replace = False)
-        fake_samples = data.data[ids].astype(np.float)
-        
-        for k in range(0,self._number_of_kGANs):
-            fake_samples = np.concatenate((fake_samples,self._kGANs[k].sample(opts, number_samples)),axis = 0)
-            labels = np.concatenate((labels,np.ones(number_samples)*(k+1)), axis = 0)
-        return fake_samples, self._process_labels(opts, labels, len(fake_samples))
-
-    def _process_labels(self, opts, labels, num_data):
-        number_labels = len(np.unique(labels))
-        rez = np.zeros([num_data, number_labels])
-        for i in range(0,num_data):
-            import random
-            random_label = random.randint(0,number_labels-1)
-            prob = 0.01
-            idx = np.random.choice([int(labels[i]), random_label], size=1, p=[1. - prob, prob])
-            rez[i, idx] = 0.99 #opts['digit_classification_threshold']
-        return rez
 
 
 
