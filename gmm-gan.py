@@ -28,7 +28,7 @@ flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]"
 flags.DEFINE_integer("zdim", 5, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.8, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights") #'soft', 'hard'
-flags.DEFINE_string("workdir", 'results_gmm_reinit', "Working directory ['results']")
+flags.DEFINE_string("workdir", 'results_gmm_batch', "Working directory ['results']")
 #flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
 flags.DEFINE_bool("is_bagging", False, "Do we want to use bagging instead of adagan? [False]")
 FLAGS = flags.FLAGS
@@ -99,12 +99,12 @@ def main():
     opts['assignment'] = FLAGS.assignment
     opts['number_of_steps_made'] = 0
     opts['number_of_kGANs'] = 16
-    opts['kGANs_number_rounds'] = 100
-    opts['kill_threshold'] = 0.01
+    opts['kGANs_number_rounds'] = 1000000
+    opts['kill_threshold'] = 0.015
     opts['annealed'] = True
     opts['number_of_gpus'] = len(get_available_gpus())
     opts['reinitialize'] = True #when a gan die want to delete it (False) or re-initialize it (True)
-
+    opts['one_batch'] = True # update weights every batch (True) or every epoch (False)
     if opts['verbose']:
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s')
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')

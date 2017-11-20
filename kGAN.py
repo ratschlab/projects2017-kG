@@ -86,7 +86,7 @@ class KGANS(object):
     def _re_initialize(self, opts, data, idx):
         self._graphs[idx] = tf.Graph()
         with self._graphs[idx].as_default():
-            dev = it%opts['number_of_gpus']
+            dev = idx%opts['number_of_gpus']
             with tf.device('/device:GPU:%d' %dev):
                 self._kGAN[idx] = gan_class(opts, data, self._data_weights[:,idx])
 
@@ -179,7 +179,8 @@ class KGANS(object):
         
         #print plots
         if (opts['dataset'] == 'gmm'):
-            self._plot_competition_2d(opts)
+            print "step done"
+            #self._plot_competition_2d(opts)
         elif(opts['dataset'] == 'mnist'):
             sampled = self._sample_from_training(opts,data, self._data_weights, 50)
             metrics = Metrics()

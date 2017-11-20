@@ -113,7 +113,7 @@ def main():
     opts['annealed'] = True 
     opts['number_of_gpus'] = len(get_available_gpus())
     opts['reinitialize'] = True
-
+    opts['one_batch'] = True # update weights every batch (True) or every epoch (False)
     if opts['verbose']:
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s')
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')

@@ -426,7 +426,8 @@ class ToyGan(Gan):
                         self._data.data[data_ids],
                         points_to_plot,
                         prefix='sample_e%04d_mb%05d_' % (_epoch, _idx))
-
+                if opts['number_of_steps_made']>0 and opts['one_batch']:
+                    break
         self.d_softmax_real  = self._run_batch(
                                      opts, self._d_training,
                                      self._real_points_ph, self._data.data)
