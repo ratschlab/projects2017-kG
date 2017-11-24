@@ -17,7 +17,7 @@ import utils
 from inception_score import get_inception_score
 
 flags = tf.app.flags
-flags.DEFINE_float("g_learning_rate", 0.005,
+flags.DEFINE_float("g_learning_rate", 0.0002,
                    "Learning rate for Generator optimizers [16e-4]")
 flags.DEFINE_float("d_learning_rate", 0.0001,
                    "Learning rate for Discriminator optimizers [4e-4]")
@@ -27,7 +27,7 @@ flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]"
 flags.DEFINE_integer("zdim", 8, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.01, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights")
-flags.DEFINE_string("workdir", 'results_mnist_inception', "Working directory ['results']")
+flags.DEFINE_string("workdir", 'results_cifar10largeinception3', "Working directory ['results']")
 #flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
 #flags.DEFINE_bool("vae", False, "Use VAE instead of GAN")
 #flags.DEFINE_bool("pot", False, "Use VAE instead of GAN")
@@ -45,13 +45,12 @@ def get_available_gpus():
 def main():
     opts = {}
     opts['random_seed'] = 66
-    opts['dataset'] = 'mnist' # gmm, circle_gmm,  mnist, mnist3 ...
+    opts['dataset'] = 'cifar10' # gmm, circle_gmm,  mnist, mnist3 ...
  #   opts['conditional'] = False
  #   opts['unrolled'] = FLAGS.unrolled # Use Unrolled GAN? (only for images)
  #   opts['unrolling_steps'] = 5 # Used only if unrolled = True
-    opts['data_dir'] = 'mnist'
+    opts['data_dir'] = 'cifar10'
     opts['trained_model_path'] = 'models'
-    opts['mnist_trained_model_file'] = 'mnist_trainSteps_19999_yhat' # 'mnist_trainSteps_20000'
 #    opts['gmm_max_val'] = 15.
 #    opts['toy_dataset_size'] = 10000
 #    opts['toy_dataset_dim'] = 2
@@ -71,7 +70,7 @@ def main():
     opts["init_bias"] = 0.0
     opts['latent_space_distr'] = 'normal' # uniform, normal
     opts['optimizer'] = 'adam' # sgd, adam
-    opts["batch_size"] = 64
+    opts["batch_size"] = 128
     opts["d_steps"] = 1
     opts["g_steps"] = 2
     opts["verbose"] = True
@@ -87,8 +86,8 @@ def main():
     opts["opt_beta1"] = FLAGS.adam_beta1
     opts['batch_norm_eps'] = 1e-05
     opts['batch_norm_decay'] = 0.9
-    opts['d_num_filters'] = 32#512
-    opts['g_num_filters'] = 64#1024
+    opts['d_num_filters'] = 256#512
+    opts['g_num_filters'] = 512#1024
     opts['conv_filters_dim'] = 5
     opts["early_stop"] = -1 # set -1 to run normally
     opts["plot_every"] = 100
@@ -109,7 +108,7 @@ def main():
     opts['assignment'] = FLAGS.assignment
     opts['number_of_steps_made'] = 0
     opts['number_of_kGANs'] = 10
-    opts['kGANs_number_rounds'] = 300
+    opts['kGANs_number_rounds'] = 200
     opts['kill_threshold'] = 0.001 
     opts['annealed'] = True 
     opts['number_of_gpus'] = len(get_available_gpus())
@@ -154,12 +153,6 @@ def main():
         logging.debug('Plotting results')
         metrics.make_plots(opts, step, data.data,more_fake_points, kG._data_weights, prefix = "")
         metrics._return_plots_pics(opts, step, data.data,fake_points_plot, 50,  kG._data_weights, prefix = "")
-        fp = []
-        for i in range(fake_points.shape[0]): fp.append(fake_points[i,:,:,:]*255)
-        inception = get_inception_score(fp)
-        logging.debug('Inception score: ' + ''.join(repr(inception)) )
-        
-        
         #idx_plot_colors_end = 0
         #idx_plot_colors_start = 0
         
@@ -169,6 +162,11 @@ def main():
         #    metrics.make_plots(opts, step, data.data,fake_points_plot[idx_plot_colors_start:idx_plot_colors_end], kG._data_weights, prefix = str(k))
 
         res = metrics.evaluate(opts, step, data.data[:500],fake_points, more_fake_points, prefix='')
+    fake_points = kG.sample_mixture(opts, 50000)
+    fp = []
+    for i in range(fake_points.shape[0]): fp.append(fake_points[i,:,:,:]*255)
+    inception = get_inception_score(fp)
+    logging.debug('Inception score: ' + ''.join(repr(inception)) )
     logging.debug("kGANs finished working!")
 
 if __name__ == '__main__':

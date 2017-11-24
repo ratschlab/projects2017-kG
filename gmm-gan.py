@@ -18,7 +18,7 @@ import utils
 import pdb
 
 flags = tf.app.flags
-flags.DEFINE_float("g_learning_rate", 0.001,
+flags.DEFINE_float("g_learning_rate", 0.008,#0.005
                    "Learning rate for Generator optimizers [16e-4]")
 flags.DEFINE_float("d_learning_rate", 0.0001,
                    "Learning rate for Discriminator optimizers [4e-4]")
@@ -28,7 +28,7 @@ flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]"
 flags.DEFINE_integer("zdim", 5, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.8, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights") #'soft', 'hard'
-flags.DEFINE_string("workdir", 'results_gmm_batch', "Working directory ['results']")
+flags.DEFINE_string("workdir", 'results_gmm_nokill2', "Working directory ['results']")
 #flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
 flags.DEFINE_bool("is_bagging", False, "Do we want to use bagging instead of adagan? [False]")
 FLAGS = flags.FLAGS
@@ -50,7 +50,7 @@ def main():
 #    opts['trained_model_path'] = 'models'
 #    opts['mnist_trained_model_file'] = 'mnist_trainSteps_19999_yhat' # 'mnist_trainSteps_20000'
     opts['gmm_max_val'] = 15.
-    opts['toy_dataset_size'] = 128 * 1000 *2
+    opts['toy_dataset_size'] = 128 * 1000 *1
     opts['toy_dataset_dim'] = 2
 #    opts['mnist3_dataset_size'] = 2 * 64 # 64 * 2500
 #    opts['mnist3_to_channels'] = False # Hide 3 digits of MNIST to channels
@@ -99,12 +99,12 @@ def main():
     opts['assignment'] = FLAGS.assignment
     opts['number_of_steps_made'] = 0
     opts['number_of_kGANs'] = 16
-    opts['kGANs_number_rounds'] = 1000000
-    opts['kill_threshold'] = 0.015
+    opts['kGANs_number_rounds'] = 200
+    opts['kill_threshold'] = 0.0005
     opts['annealed'] = True
     opts['number_of_gpus'] = len(get_available_gpus())
-    opts['reinitialize'] = True #when a gan die want to delete it (False) or re-initialize it (True)
-    opts['one_batch'] = True # update weights every batch (True) or every epoch (False)
+    opts['reinitialize'] = False #when a gan die want to delete it (False) or re-initialize it (True)
+    opts['one_batch'] = False# update weights every batch (True) or every epoch (False)
     if opts['verbose']:
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s')
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
@@ -132,7 +132,7 @@ def main():
         kG.make_step(opts, data)
         num_fake = opts['eval_points_num']
         logging.debug('Sampling fake points')
-        num_fake_points = 500
+        num_fake_points = 500*opts['number_of_kGANs']
         fake_points, num_samples_gans = kG.sample_mixture_separate_color(opts, num_fake_points)
         logging.debug('Sampling more fake points')
         
@@ -142,7 +142,7 @@ def main():
         logging.debug('Plotting results')
         opts['plot_kGANs'] = True
         
-        metrics.make_plots(opts, step, data.data[:500],
+        metrics.make_plots(opts, step, data.data[:10000],
                 fake_points, weights = num_samples_gans)
         
         (likelihood, C) = metrics.evaluate(

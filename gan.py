@@ -1369,7 +1369,7 @@ class BigImageGan(ImageGan):
         if opts['input_normalize_sym']:
             return tf.nn.tanh(h5)
         else:
-            return tf.nn.sigmoid(h5)
+            return h5
 
 
 class ImageUnrolledGan(ImageGan):

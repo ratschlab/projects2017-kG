@@ -41,7 +41,7 @@ class KGANS(object):
         self._number_of_kGANs = opts['number_of_kGANs']
         self._assignment = opts['assignment']
         if self._assignment == 'soft':
-            self._init_data_weights_uniform(opts, data)
+            self._init_data_weights_soft(opts, data)
         elif self._assignment == 'hard':
             self._init_data_weights_hard(opts, data)
         else:
@@ -51,7 +51,7 @@ class KGANS(object):
         self._mixture_weights = np.ones([1, opts['number_of_kGANs']]) / (opts['number_of_kGANs'] + 0.)
         
         # Which GAN architecture should we use?
-        pic_datasets = ['mnist']
+        pic_datasets = ['mnist','cifar10']
         gan_class = None
         if opts['dataset'] in ('gmm'):
             gan_class = GAN.ToyGan
@@ -88,7 +88,13 @@ class KGANS(object):
         with self._graphs[idx].as_default():
             dev = idx%opts['number_of_gpus']
             with tf.device('/device:GPU:%d' %dev):
-                self._kGAN[idx] = gan_class(opts, data, self._data_weights[:,idx])
+                self._kGANs[idx] = self._gan_class(opts, data, self._data_weights[:,idx])
+                opts['number_of_steps_made']
+                self._kGANs[idx].train(opts)
+                opts["gan_epoch_num"] = 1
+
+        if self._assignment == 'soft':
+            self._update_data_weights_soft(opts, data)
 
     def _internal_step(self, (opts, data, k)):
         if self._mixture_weights[0][k] != 0:
@@ -98,7 +104,6 @@ class KGANS(object):
     def make_step(self, opts, data):
         """Make step of the kGAN algorithm. First train the GANs on the reweighted training set,
         then update the weights"""
-        
         pool = ThreadPool(opts['number_of_gpus'])
         job_args = [(opts, data, i) for i in range(0,self._number_of_kGANs)] 
         pool.map(self._internal_step, job_args)
@@ -110,9 +115,10 @@ class KGANS(object):
             self._update_data_weights_hard(opts, data)
         killed = False
         if opts['reinitialize']:
-            while (np.where(self._mixture_weights[0] < opts['kill_threshold'])[0].size!= 0):
-                idx_to_reinitialize = np.argmin(self._mixture_weights[0])
-                self._re_initialize(opts, data, idx_to_reinitialize)
+            if (np.where(self._mixture_weights[0] < opts['kill_threshold'])[0].size!= 0):
+                idx_to_reinitialize = np.where(self._mixture_weights[0] < opts['kill_threshold'])[0].flatten()#np.argmin(self._mixture_weights[0])
+                for idx in idx_to_reinitialize:
+                    self._re_initialize(opts, data, idx)
         else:
             while (np.where(self._mixture_weights[0] < opts['kill_threshold'])[0].size!= 0):
                 idx_to_kill = np.argmin(self._mixture_weights[0])
@@ -138,7 +144,7 @@ class KGANS(object):
 
     def _init_data_weights_soft(self, opts, data):
         """initialize wegiths with dirichlet distribution with alpha = 1"""
-        alpha = 0.5/opts['number_of_kGANs']
+        alpha = 1./opts['number_of_kGANs']
         self._data_weights = np.random.dirichlet(np.ones(self._data_num)*alpha, opts['number_of_kGANs']).transpose()
 
     def _init_data_weights_uniform(self, opts, data):
@@ -157,7 +163,7 @@ class KGANS(object):
         # pi_x(j) = 1/Z alpha_j p(x | g_j)
         annealing = 1.
         if opts['annealed']:
-            annealing = min(1.,(1. + 2.*opts['number_of_steps_made']*1.)/opts["kGANs_number_rounds"])
+            annealing = min(1.,(1. + opts['number_of_steps_made']*1.)/opts["kGANs_number_rounds"])
         
         pi = np.power(prob_x_given_gan * np.repeat(self._mixture_weights,self._data_weights.shape[0],axis = 0), annealing)# + np.power((1./self._data_num),2) 
         pi /= pi.sum(axis = 1, keepdims = True)
@@ -185,8 +191,13 @@ class KGANS(object):
             sampled = self._sample_from_training(opts,data, self._data_weights, 50)
             metrics = Metrics()
             metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  self._data_weights, prefix = "train")    
-            self.tsne_plotter(opts,  data)
-    
+            #self.tsne_plotter(opts,  data)
+            self.tsne_real_fake(opts,  data)
+        elif(opts['dataset'] == 'cifar10'):
+            sampled = self._sample_from_training(opts,data, self._data_weights, 50)
+            metrics = Metrics()
+            metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  self._data_weights, prefix = "train")    
+            self.tsne_real_fake(opts,  data)
     
     def _update_data_weights_hard(self, opts, data):
         """ 
@@ -229,6 +240,18 @@ class KGANS(object):
             sampled = np.concatenate((sampled, data.data[data_ids].astype(np.float)),axis = 0)
         return sampled
 
+    def _sample_from_training_gan_label_real_fake(self, opts, data, probs, num_pts):
+        """labels are the gan idx, sample from the training set
+        with importance sampling using the probability of each gan anf
+        remember from which gan do the samples come from """
+        data_ids = np.random.choice(self._data_num, num_pts,replace=False)
+        sampled = data.data[data_ids].astype(np.float)
+        labels = np.zeros(num_pts)
+        fake_points = self.sample_mixture(opts, num_pts)
+        num_fake = len(fake_points)
+        sampled = np.concatenate((sampled, fake_points),axis = 0)
+        labels = np.append(labels, np.ones(num_fake))
+        return sampled, labels
     def _sample_from_training_gan_label(self, opts, data, probs, num_pts):
         """labels are the gan idx, sample from the training set
         with importance sampling using the probability of each gan anf
@@ -242,6 +265,28 @@ class KGANS(object):
             labels = np.append(labels, np.ones(num_pts)*k)
         return sampled, labels
     
+    def tsne_real_fake(self, opts,  data):
+        """tsne plotter, not particularly interesting"""
+        #return True 
+        sampled,labels = self._sample_from_training_gan_label_real_fake(opts,data, self._data_weights, 500)
+        from sklearn.manifold import TSNE
+        import matplotlib 
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        fig =  plt.figure()
+        sampled = np.asarray(sampled).astype('float64')
+        sampled = sampled.reshape((sampled.shape[0], -1))
+        
+        vis_data = TSNE(n_components=2).fit_transform(sampled)
+        vis_x = vis_data[:, 0]
+        vis_y = vis_data[:, 1]
+
+        plt.scatter(vis_x, vis_y, c=labels.astype(int), cmap=plt.cm.get_cmap("jet", 2))
+        plt.colorbar(ticks=range(2))
+        #plt.clim(-0.5, 9.5)
+        filename = opts['work_dir'] + '/tsne{:04d}.png'.format(opts['number_of_steps_made'])
+        fig.savefig(filename)
+        plt.close()
     def tsne_plotter(self, opts,  data):
         """tsne plotter, not particularly interesting"""
         #return True 
