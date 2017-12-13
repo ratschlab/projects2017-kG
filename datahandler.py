@@ -137,23 +137,23 @@ class DataHandler(object):
         np.random.seed(opts["random_seed"])
         max_val = opts['gmm_max_val']
         
-        modes_per_row = int(np.sqrt(modes_num))
-        step = np.ceil(2.*opts['gmm_max_val']/modes_per_row)
-        init_i = - max_val - step/2.
+#        modes_per_row = int(np.sqrt(modes_num))
+#        step = np.ceil(2.*opts['gmm_max_val']/modes_per_row)
+#        init_i = - max_val - step/2.
 
-        mixture_means = np.zeros([modes_num, 2])
-        idx = 0
-        for i in range(0,modes_num/modes_per_row):
-            init_i += step 
-            init_j = - max_val - step/2.
-            for j in range(0, modes_num/modes_per_row):
-                init_j += step
-                mixture_means[idx, :] = np.array([init_i,init_j])
-                idx += 1
+#        mixture_means = np.zeros([modes_num, 2])
+#        idx = 0
+#        for i in range(0,modes_num/modes_per_row):
+#            init_i += step 
+#            init_j = - max_val - step/2.
+#            for j in range(0, modes_num/modes_per_row):
+#                init_j += step
+#                mixture_means[idx, :] = np.array([init_i,init_j])
+#                idx += 1
         
-        #mixture_means = np.random.uniform(
-        #    low=-max_val-1, high=max_val+1,
-        #    size=(modes_num, opts['toy_dataset_dim']))*1.5
+        mixture_means = np.random.uniform(
+            low=-max_val-1, high=max_val+1,
+            size=(modes_num, opts['toy_dataset_dim']))*1.5
         
         #mixture_means = np.array([[5,5],[-5,5],[5,-5],[-5,-5]])*2.
 
@@ -168,6 +168,12 @@ class DataHandler(object):
         mixture_variance = \
                 max_val / variance_factor(modes_num, opts['toy_dataset_dim'])
 
+        def banana(X, b=0.04):
+            """Twist the second column of X into a banana."""
+            X = X[0]
+            X = [x for x in X.copy()]
+            X[1] += b * X[0]**2 - 100 * b
+            return X
         # Now we sample points, for that we unseed
         np.random.seed()
         num = opts['toy_dataset_size']
@@ -176,13 +182,18 @@ class DataHandler(object):
             comp_id = np.random.randint(modes_num)
             mean = mixture_means[comp_id]
             cov = mixture_variance * np.identity(opts["toy_dataset_dim"])
-            X[idx, :, 0, 0] = np.random.multivariate_normal(mean, cov, 1)
-
+            if opts['banana']:
+                X[idx, :, 0, 0] = np.asarray([banana(np.random.multivariate_normal(mean, cov, 1))])
+            else:
+                X[idx, :, 0, 0] = np.random.multivariate_normal(mean, cov, 1)
+        
         self.data_shape = (opts['toy_dataset_dim'], 1, 1)
         self.data = X
         self.num_points = len(X)
 
         logging.debug('Loading GMM dataset done!')
+    
+
 
     def _load_guitars(self, opts):
         """Load data from Thomann files.

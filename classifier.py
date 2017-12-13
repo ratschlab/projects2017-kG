@@ -24,7 +24,7 @@ class Classifier(object):
     importance sampling of minibatches during the training. All the
     methods should be implemented in the subclasses.
     """
-    def __init__(self, opts, data):
+    def __init__(self, opts, data, data_weights = None):
 
         # Create a new session with session.graph = default graph
         self._session = tf.Session()
@@ -36,7 +36,7 @@ class Classifier(object):
         self._noise_ph = None
         self._c_loss = None # Loss of mixture discriminator
         self._c_training = None # Outputs of the mixture discriminator on data
-
+        self._data_weights = data_weights
         self._c_optim = None
 
         with self._session.as_default(), self._session.graph.as_default():
@@ -212,7 +212,7 @@ class ToyClassifier(Classifier):
 
         """
 
-        batches_num = self._data.num_points / opts['batch_size']
+        batches_num = self._data.num_points / opts['batch_size_classifier']
         logging.debug('Training a mixture discriminator')
         for epoch in xrange(opts["mixture_c_epoch_num"]):
             for idx in xrange(batches_num):
@@ -220,7 +220,7 @@ class ToyClassifier(Classifier):
                                        replace=False)
                 batch_fake_images = fake_images[ids]
                 ids = np.random.choice(self._data.num_points, opts['batch_size_classifier'],
-                                       replace=False)
+                                       replace=False, p = self._data_weights)
                 batch_real_images = self._data.data[ids]
                 _ = self._session.run(
                     self._c_optim,
@@ -339,68 +339,6 @@ class ImageClassifier(Classifier):
         logging.debug("Building Graph Done.")
 
 
-    def _train_internal(self, opts):
-        """Train a GAN model.
-
-        """
-
-        batches_num = self._data.num_points / opts['batch_size']
-        train_size = self._data.num_points
-
-        counter = 0
-        logging.debug('Training GAN')
-        for _epoch in xrange(opts["gan_epoch_num"]):
-            for _idx in xrange(batches_num):
-                # logging.debug('Step %d of %d' % (_idx, batches_num ) )
-                data_ids = np.random.choice(train_size, opts['batch_size'],
-                                            replace=False, p=self._data_weights)
-                batch_images = self._data.data[data_ids].astype(np.float)
-                batch_noise = utils.generate_noise(opts, opts['batch_size'])
-                # Update discriminator parameters
-                for _iter in xrange(opts['d_steps']):
-                    _ = self._session.run(
-                        self._d_optim,
-                        feed_dict={self._real_points_ph: batch_images,
-                                   self._noise_ph: batch_noise,
-                                   self._is_training_ph: True})
-                # Update generator parameters
-                for _iter in xrange(opts['g_steps']):
-                    _ = self._session.run(
-                        self._g_optim,
-                        feed_dict={self._noise_ph: batch_noise,
-                                   self._is_training_ph: True})
-                counter += 1
-
-                if opts['verbose'] and counter % opts['plot_every'] == 0:
-                    logging.debug(
-                        'Epoch: %d/%d, batch:%d/%d' % \
-                        (_epoch+1, opts['gan_epoch_num'], _idx+1, batches_num))
-                    metrics = Metrics()
-                    points_to_plot = self._run_batch(
-                        opts, self._G, self._noise_ph,
-                        self._noise_for_plots[0:320],
-                        self._is_training_ph, False)
-                    metrics.make_plots(
-                        opts,
-                        counter,
-                        None,
-                        points_to_plot,
-                        prefix='sample_e%04d_mb%05d_' % (_epoch, _idx))
-                if opts['early_stop'] > 0 and counter > opts['early_stop']:
-                    break
-
-    def _sample_internal(self, opts, num):
-        """Sample from the trained GAN model.
-
-        """
-        noise = utils.generate_noise(opts, num)
-        sample = self._run_batch(
-            opts, self._G, self._noise_ph, noise,
-            self._is_training_ph, False)
-        # sample = self._session.run(
-        #     self._G, feed_dict={self._noise_ph: noise})
-        return sample
-
     def _train_mixture_discriminator_internal(self, opts, fake_images):
         """Train a classifier separating true data from points in fake_images.
 
@@ -416,7 +354,7 @@ class ImageClassifier(Classifier):
                                        replace=False)
                 batch_fake_images = fake_images[ids]
                 ids = np.random.choice(self._data.num_points, opts['batch_size'],
-                                       replace=False)
+                                       replace=False, p = self._data_weights)
                 batch_real_images = self._data.data[ids]
                 _ = self._session.run(
                     self._c_optim,

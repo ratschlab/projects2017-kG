@@ -18,7 +18,7 @@ import utils
 import pdb
 
 flags = tf.app.flags
-flags.DEFINE_float("g_learning_rate", 0.008,#0.005
+flags.DEFINE_float("g_learning_rate", 0.005,
                    "Learning rate for Generator optimizers [16e-4]")
 flags.DEFINE_float("d_learning_rate", 0.0001,
                    "Learning rate for Discriminator optimizers [4e-4]")
@@ -28,7 +28,7 @@ flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]"
 flags.DEFINE_integer("zdim", 5, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.8, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights") #'soft', 'hard'
-flags.DEFINE_string("workdir", 'results_gmm_nokill2', "Working directory ['results']")
+flags.DEFINE_string("workdir", 'results_gmm_banananew', "Working directory ['results']")
 #flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
 flags.DEFINE_bool("is_bagging", False, "Do we want to use bagging instead of adagan? [False]")
 FLAGS = flags.FLAGS
@@ -50,7 +50,7 @@ def main():
 #    opts['trained_model_path'] = 'models'
 #    opts['mnist_trained_model_file'] = 'mnist_trainSteps_19999_yhat' # 'mnist_trainSteps_20000'
     opts['gmm_max_val'] = 15.
-    opts['toy_dataset_size'] = 128 * 1000 *1
+    opts['toy_dataset_size'] = 64 * 1000 
     opts['toy_dataset_dim'] = 2
 #    opts['mnist3_dataset_size'] = 2 * 64 # 64 * 2500
 #    opts['mnist3_to_channels'] = False # Hide 3 digits of MNIST to channels
@@ -67,18 +67,18 @@ def main():
     opts["init_bias"] = 0.0
     opts['latent_space_distr'] = 'normal' # uniform, normal
     opts['optimizer'] = 'adam' # sgd, adam
-    opts["batch_size"] = 32#256
-    opts["batch_size_classifier"] = 128
+    opts["batch_size"] = 32
+    opts["batch_size_classifier"] = 32
     opts["d_steps"] = 1
     opts["g_steps"] = 2
     opts["verbose"] = True
     opts['tf_run_batch_size'] = 100
     opts['objective'] = 'JS'
 
-    opts['gmm_modes_num'] = 16
+    opts['gmm_modes_num'] = 3
     opts['latent_space_dim'] = FLAGS.zdim
-    opts["gan_epoch_num"] = 1
-#    opts["mixture_c_epoch_num"] = 2
+    opts["gan_epoch_num"] = 10
+    opts["mixture_c_epoch_num"] = 10
     opts['opt_learning_rate'] = FLAGS.learning_rate
     opts['opt_d_learning_rate'] = FLAGS.d_learning_rate
     opts['opt_g_learning_rate'] = FLAGS.g_learning_rate
@@ -98,13 +98,14 @@ def main():
     opts['plot_kGANs'] = False #do not set to True
     opts['assignment'] = FLAGS.assignment
     opts['number_of_steps_made'] = 0
-    opts['number_of_kGANs'] = 16
-    opts['kGANs_number_rounds'] = 200
-    opts['kill_threshold'] = 0.0005
+    opts['number_of_kGANs'] = 3
+    opts['kGANs_number_rounds'] = 10
+    opts['kill_threshold'] = 0.03
     opts['annealed'] = True
     opts['number_of_gpus'] = len(get_available_gpus())
-    opts['reinitialize'] = False #when a gan die want to delete it (False) or re-initialize it (True)
+    opts['reinitialize'] = True #when a gan die want to delete it (False) or re-initialize it (True)
     opts['one_batch'] = False# update weights every batch (True) or every epoch (False)
+    opts['banana'] = True
     if opts['verbose']:
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s')
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
@@ -128,6 +129,7 @@ def main():
     #train loop
     for step in range(opts['kGANs_number_rounds']):
         opts['number_of_steps_made'] = step
+        opts["mixture_c_epoch_num"] = 10#np.min([step +1,20])
         logging.debug('Running step %03d' %(step))
         kG.make_step(opts, data)
         num_fake = opts['eval_points_num']

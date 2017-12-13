@@ -27,7 +27,8 @@ flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]"
 flags.DEFINE_integer("zdim", 8, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.01, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights")
-flags.DEFINE_string("workdir", 'results_mnist_inception', "Working directory ['results']")
+flags.DEFINE_string("workdir", 'results_mnist_pot', "Working directory ['results']")
+
 #flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
 #flags.DEFINE_bool("vae", False, "Use VAE instead of GAN")
 #flags.DEFINE_bool("pot", False, "Use VAE instead of GAN")
@@ -98,6 +99,8 @@ def main():
     opts['inverse_metric'] = False # Use metric from the Unrolled GAN paper?
     opts['inverse_num'] = 100 # Number of real points to inverse.
     opts['objective'] = None
+    opts['data_augm'] = False
+
 #    opts['vae'] = FLAGS.vae
 #    opts['pot'] = FLAGS.pot
 #    opts['pot_pz_std'] = 2
@@ -114,7 +117,8 @@ def main():
     opts['annealed'] = True 
     opts['number_of_gpus'] = len(get_available_gpus())
     opts['reinitialize'] = True
-    opts['one_batch'] = True # update weights every batch (True) or every epoch (False)
+    opts['one_batch'] = False # update weights every batch (True) or every epoch (False)
+    
     if opts['verbose']:
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s')
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
@@ -154,10 +158,10 @@ def main():
         logging.debug('Plotting results')
         metrics.make_plots(opts, step, data.data,more_fake_points, kG._data_weights, prefix = "")
         metrics._return_plots_pics(opts, step, data.data,fake_points_plot, 50,  kG._data_weights, prefix = "")
-        fp = []
-        for i in range(fake_points.shape[0]): fp.append(fake_points[i,:,:,:]*255)
-        inception = get_inception_score(fp)
-        logging.debug('Inception score: ' + ''.join(repr(inception)) )
+        #fp = []
+        #for i in range(fake_points.shape[0]): fp.append(fake_points[i,:,:,:]*255)
+        #inception = get_inception_score(fp)
+        #logging.debug('Inception score: ' + ''.join(repr(inception)) )
         
         
         #idx_plot_colors_end = 0
