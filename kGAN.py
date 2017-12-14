@@ -261,7 +261,7 @@ class KGANS(object):
         # probability x_i given gan_j
         if self._assignment == 'soft':
             #p_k = np.min(np.ones(self._data_weights[:,k].shape),self._data_weights[:,k]*np.transpose((1. - D_k)/(D_k + 1e-12)) + 0.5)
-            p_k = self._data_weights[:,k]*(np.transpose((1. - D_k)/(D_k + 1e-12)))
+            p_k = self._data_weights[:,k]*(np.transpose((1. - D_k)/(D_k + 1e-12)) + 1e-12) 
         elif self._assignment == 'hard':
             p_k = 1./(self._data_num*self._mixture_weights[0][k])*np.transpose((1. - D_k)/(D_k + 1e-12))
             
