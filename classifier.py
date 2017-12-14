@@ -33,7 +33,6 @@ class Classifier(object):
         # Placeholders
         self._real_points_ph = None
         self._fake_points_ph = None
-        self._noise_ph = None
         self._c_loss = None # Loss of mixture discriminator
         self._c_training = None # Outputs of the mixture discriminator on data
         self._data_weights = data_weights
@@ -141,7 +140,7 @@ class Classifier(object):
         assert False, 'Gan base class has no mixture discriminator method defined.'
 
 class ToyClassifier(Classifier):
-    """A simple GAN implementation, suitable for toy datasets.
+    """A simple binary classifier implementation, suitable for toy datasets.
 
     """
 
@@ -174,8 +173,6 @@ class ToyClassifier(Classifier):
             tf.float32, [None] + list(data_shape), name='real_points_ph')
         fake_points_ph = tf.placeholder(
             tf.float32, [None] + list(data_shape), name='fake_points_ph')
-        noise_ph = tf.placeholder(
-            tf.float32, [None] + [opts['latent_space_dim']], name='noise_ph')
 
         # Operations
 
@@ -200,7 +197,6 @@ class ToyClassifier(Classifier):
 
         self._real_points_ph = real_points_ph
         self._fake_points_ph = fake_points_ph
-        self._noise_ph = noise_ph
 
         self._c_loss = c_loss
         self._c_training = c_training
@@ -235,7 +231,7 @@ class ToyClassifier(Classifier):
 
         
 class ImageClassifier(Classifier):
-    """A simple GAN implementation, suitable for pictures.
+    """A simple classifier implementation, suitable for pictures.
 
     """
 
@@ -278,8 +274,6 @@ class ImageClassifier(Classifier):
             tf.float32, [None] + list(data_shape), name='real_points_ph')
         fake_points_ph = tf.placeholder(
             tf.float32, [None] + list(data_shape), name='fake_points_ph')
-        noise_ph = tf.placeholder(
-            tf.float32, [None] + [opts['latent_space_dim']], name='noise_ph')
         is_training_ph = tf.placeholder(tf.bool, name='is_train_ph')
 
 
@@ -330,7 +324,6 @@ class ImageClassifier(Classifier):
 
         self._real_points_ph = real_points_ph
         self._fake_points_ph = fake_points_ph
-        self._noise_ph = noise_ph
         self._is_training_ph = is_training_ph
         self._c_loss = c_loss
         self._c_training = c_training
