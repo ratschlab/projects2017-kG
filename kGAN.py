@@ -10,7 +10,7 @@ import logging
 import numpy as np
 from numpy.random import dirichlet
 import tensorflow as tf
-import gan as GAN
+import vae as GAN
 from utils import ArraySaver
 from metrics import Metrics
 import utils
@@ -39,7 +39,7 @@ class KGANS(object):
         self._number_of_kGANs = opts['number_of_kGANs']
         self._assignment = opts['assignment']
         if self._assignment == 'soft':
-            self._init_data_weights_soft(opts, data)
+            self._init_data_weights_uniform(opts, data)
         elif self._assignment == 'hard':
             self._init_data_weights_hard(opts, data)
         else:
@@ -47,12 +47,12 @@ class KGANS(object):
 
         self._saver = ArraySaver('disk', workdir=opts['work_dir'])
         self._mixture_weights = np.ones([1, opts['number_of_kGANs']]) / (opts['number_of_kGANs'] + 0.)
-        
+        self._hard_assigned = np.ones([1, opts['number_of_kGANs']]) / (opts['number_of_kGANs'] + 0.) * self._data_num
         # Which GAN architecture should we use?
         pic_datasets = ['mnist','cifar10']
         gan_class = None
         if opts['dataset'] in ('gmm'):
-            gan_class = GAN.ToyGan
+            gan_class = GAN.ToyVae
             self._classifier = CLASSIFIER.ToyClassifier
         elif opts['dataset'] in pic_datasets:
             if opts['pot']:
@@ -104,7 +104,8 @@ class KGANS(object):
     def _internal_step(self, (opts, data, k)):
         if self._mixture_weights[0][k] != 0:
             with self._graphs[k].as_default():
-                self._kGANs[k].train(opts)
+                if self._hard_assigned[0][k] > opts['batch_size']:
+                    self._kGANs[k].train(opts)
 
     def make_step(self, opts, data):
         """Make step of the kGAN algorithm. First train the GANs on the reweighted training set,
@@ -187,11 +188,21 @@ class KGANS(object):
         #_data_weights = pi/(N*alpha)
         self._data_weights = pi / np.repeat(self._mixture_weights,self._data_weights.shape[0],axis = 0)
         self._data_weights /= self._data_weights.sum(axis = 0, keepdims = True)
+        new_weights = np.ones(prob_x_given_gan.shape)*0.
+        #for i in range(0,self._data_num):
+        #    j = np.random.choice(opts['number_of_kGANs'], size=1, p=pi[i,:])    
+        #    new_weights[i,j] = 1. 
         
+        # the new weights is a hard assignment, therefore, we assigne the point to the gan
+        # with maximum likelihood p(x|gan) (see report/hard assignment)
+        new_weights[np.arange(len(prob_x_given_gan)), prob_x_given_gan.argmax(1)] = 1.
+        self._hard_assigned = new_weights.sum(axis = 0, keepdims = True)
+        print self._hard_assigned
+        new_weights /= self._hard_assigned
         # update data weights in eahc gan for the importance sampling 
         for k in range (0,self._number_of_kGANs):
-            self._kGANs[k]._data_weights = 0.25*self._kGANs[k]._data_weights + 0.75*self._data_weights[:,k]
-            self._data_weights[:,k] = self._kGANs[k]._data_weights
+            self._kGANs[k]._data_weights = new_weights[:,k]
+            #self._data_weights[:,k] = self._data_weights[:,k]
         
         #print plots
         if (opts['dataset'] == 'gmm'):
@@ -234,6 +245,7 @@ class KGANS(object):
         #print plots
         if (opts['dataset'] == 'gmm'):
             self._plot_competition_2d(opts)
+            self._plot_distr_2d(opts)
         elif(opts['dataset'] == 'mnist'):
             sampled = self._sample_from_training(opts,data, self._data_weights, 50)
             metrics = Metrics()
@@ -296,7 +308,7 @@ class KGANS(object):
         g = tf.Graph()
         with g.as_default():
             with tf.device('/device:GPU:%d' %device):
-                classifier = self._classifier(opts, data, gan._data_weights)
+                classifier = self._classifier(opts, data, self._data_weights[:,k])
                 num_fake_images = data.num_points
                 fake_images = gan.sample(opts, num_fake_images)
                 prob_real, prob_fake = classifier.train_mixture_discriminator(opts, fake_images)
@@ -318,7 +330,7 @@ class KGANS(object):
             g1.hist2d(fake[:,0].flatten(), fake[:,1].flatten(), bins=(50, 50), cmap=plt.cm.jet)
             g1.set_xlim(-max_val, max_val)
             g1.set_ylim(-max_val, max_val)
-        filename = opts['work_dir'] + '/distr_heatmap_step{:02d}.png'.format(opts['number_of_steps_made'])
+        filename = opts['work_dir'] + '/distr_heatmap_step{:05d}.png'.format(opts['number_of_steps_made'])
         fig.savefig(filename)
         plt.close()
 
@@ -335,7 +347,7 @@ class KGANS(object):
             g1.axis([-max_val, max_val, -max_val, max_val])
             g1.scatter(self._kGANs[0]._data.data[:, 0], self._kGANs[0]._data.data[:, 1], c=self._data_weights[:,k], s=20, label='real')
 
-        filename = opts['work_dir'] + '/competition_heatmap_step{:02d}.png'.format(opts['number_of_steps_made'])
+        filename = opts['work_dir'] + '/competition_heatmap_step{:05d}.png'.format(opts['number_of_steps_made'])
         fig.savefig(filename)
         plt.close()
 
