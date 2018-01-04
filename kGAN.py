@@ -55,10 +55,11 @@ class KGANS(object):
             gan_class = GAN.ToyVae
             self._classifier = CLASSIFIER.ToyClassifier
         elif opts['dataset'] in pic_datasets:
-            if opts['pot']:
-                gan_class = POT.ImagePot
-            else:
-                gan_class = GAN.ImageGan
+            #if opts['pot']:
+            #    gan_class = POT.ImagePot
+            #else:
+            #    gan_class = GAN.ImageGan
+            gan_class = GAN.ImageVae
             self._classifier = CLASSIFIER.ImageClassifier
         else:
             assert False, "We don't have any other GAN implementation yet..."
@@ -68,6 +69,8 @@ class KGANS(object):
         #initialize k-graphs and the kGANs
         self._graphs = []
         self._kGANs = []
+        self._k_class = []
+        self._k_class_graphs = [] 
         self._ever_dead = []
         for it in range(0,self._number_of_kGANs):
             # initialize graph k
@@ -78,6 +81,12 @@ class KGANS(object):
                 with tf.device('/device:GPU:%d' %dev):
                     # initialize gan k
                     self._kGANs.append(gan_class(opts, data, self._data_weights[:,it]))
+            #self._k_class_graphs.append(tf.Graph())
+            #with self._k_class_graphs[it].as_default():
+            #    dev = it%opts['number_of_gpus']
+            #    with tf.device('/device:GPU:%d' %dev):
+            #        self._k_class.append(self._classifier(opts, data))
+
 
     def _kill_a_gan(self, opts, data, idx):
         '''this function kills the gan indexed with idx'''
@@ -185,9 +194,9 @@ class KGANS(object):
         self._mixture_weights /= np.sum(self._mixture_weights)
         print self._mixture_weights
         
-        #_data_weights = pi/(N*alpha)
-        self._data_weights = pi / np.repeat(self._mixture_weights,self._data_weights.shape[0],axis = 0)
-        self._data_weights /= self._data_weights.sum(axis = 0, keepdims = True)
+        #_data_weights = pi/(N*alpha) commented these two lines to do uniform weights
+        #self._data_weights = pi / np.repeat(self._mixture_weights,self._data_weights.shape[0],axis = 0)
+        #self._data_weights /= self._data_weights.sum(axis = 0, keepdims = True)
         new_weights = np.ones(prob_x_given_gan.shape)*0.
         #for i in range(0,self._data_num):
         #    j = np.random.choice(opts['number_of_kGANs'], size=1, p=pi[i,:])    
@@ -195,7 +204,9 @@ class KGANS(object):
         
         # the new weights is a hard assignment, therefore, we assigne the point to the gan
         # with maximum likelihood p(x|gan) (see report/hard assignment)
-        new_weights[np.arange(len(prob_x_given_gan)), prob_x_given_gan.argmax(1)] = 1.
+        #new_weights[np.arange(len(prob_x_given_gan)), prob_x_given_gan.argmax(1)] = 1.
+        max_values = np.transpose(np.repeat([np.amax(prob_x_given_gan, axis = 1)], opts['number_of_kGANs'], axis = 0))
+        new_weights[prob_x_given_gan == max_values] = 1.
         self._hard_assigned = new_weights.sum(axis = 0, keepdims = True)
         print self._hard_assigned
         new_weights /= self._hard_assigned
@@ -210,11 +221,15 @@ class KGANS(object):
             self._plot_competition_2d(opts)
             self._plot_distr_2d(opts)
         elif(opts['dataset'] == 'mnist'):
-            sampled = self._sample_from_training(opts,data, self._data_weights, 50)
+            wm = np.zeros(self._data_weights.shape)
+            for k in range (0,self._number_of_kGANs):
+                wm[:,k] = self._kGANs[k]._data_weights
+
+            sampled = self._sample_from_training(opts,data, wm, 50)
             metrics = Metrics()
-            metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  self._data_weights, prefix = "train")    
+            metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  wm, prefix = "train")    
             #self.tsne_plotter(opts,  data)
-            self.tsne_real_fake(opts,  data)
+            #self.tsne_real_fake(opts,  data)
         elif(opts['dataset'] == 'cifar10'):
             sampled = self._sample_from_training(opts,data, self._data_weights, 50)
             metrics = Metrics()
@@ -299,12 +314,23 @@ class KGANS(object):
         #pdb.set_trace()
         return np.transpose(np.squeeze(np.asarray(prob_x_given_gan)))
         
-    #def _get_prob_real_data(self, opts, gan, graph, data, device,k):
     def _get_prob_real_data(self, opts, gan, data, device,k):
+    #def _get_prob_real_data(self, opts, gan, data, device,k):
         """Train a classifier, separating weighted true data from the current gan.
         Returns:
         (data.num_points,) NumPy array, containing probabilities of 
         true data. I.e., output of the sigmoid function. Create a graph and train a classifier"""
+        #graph = self._k_class_graphs[k]
+        #with graph.as_default():
+        #    with tf.device('/device:GPU:%d' %device):
+                #self._data_weights[:,k] = np.on
+        #        self._k_class[k]._data_weights = self._data_weights[:,k]
+        #        num_fake_images = data.num_points
+        #        fake_images = gan.sample(opts, num_fake_images)
+        #        prob_real, prob_fake = self._k_class[k].train_mixture_discriminator(opts, fake_images)
+        #return prob_real
+    
+    
         g = tf.Graph()
         with g.as_default():
             with tf.device('/device:GPU:%d' %device):

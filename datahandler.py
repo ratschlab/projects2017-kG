@@ -137,23 +137,23 @@ class DataHandler(object):
         np.random.seed(opts["random_seed"])
         max_val = opts['gmm_max_val']
         
-#        modes_per_row = int(np.sqrt(modes_num))
-#        step = np.ceil(2.*opts['gmm_max_val']/modes_per_row)
-#        init_i = - max_val - step/2.
+        modes_per_row = int(np.sqrt(modes_num))
+        step = np.ceil(2.*opts['gmm_max_val']/modes_per_row)
+        init_i = - max_val - step/2.
 
-#        mixture_means = np.zeros([modes_num, 2])
-#        idx = 0
-#        for i in range(0,modes_num/modes_per_row):
-#            init_i += step 
-#            init_j = - max_val - step/2.
-#            for j in range(0, modes_num/modes_per_row):
-#                init_j += step
-#                mixture_means[idx, :] = np.array([init_i,init_j])
-#                idx += 1
+        mixture_means = np.zeros([modes_num, 2])
+        idx = 0
+        for i in range(0,modes_num/modes_per_row):
+            init_i += step 
+            init_j = - max_val - step/2.
+            for j in range(0, modes_num/modes_per_row):
+                init_j += step
+                mixture_means[idx, :] = np.array([init_i,init_j])
+                idx += 1
         
-        mixture_means = np.random.uniform(
-            low=-max_val-1, high=max_val+1,
-            size=(modes_num, opts['toy_dataset_dim']))*1.5
+        #mixture_means = np.random.uniform(
+        #    low=-max_val-1, high=max_val+1,
+        #    size=(modes_num, opts['toy_dataset_dim']))*1.5
         
         #mixture_means = np.array([[5,5],[-5,5],[5,-5],[-5,-5]])*2.
 

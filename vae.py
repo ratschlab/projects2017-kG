@@ -191,9 +191,9 @@ class ToyVae(Vae):
 
         output_shape = self._data.data_shape # (dim1, dim2, dim3)
         with tf.variable_scope("GENERATOR", reuse=reuse):
-            h0 = ops.linear(opts, noise, 100, 'h0_lin')
+            h0 = ops.linear(opts, noise, 50, 'h0_lin')
             h0 = tf.nn.relu(h0)
-            h1 = ops.linear(opts, h0, 100, 'h1_lin')
+            h1 = ops.linear(opts, h0, 50, 'h1_lin')
             h1 = tf.nn.relu(h1)
             h2 = ops.linear(opts, h1, np.prod(output_shape), 'h2_lin')
             h2 = tf.reshape(h2, [-1] + list(output_shape))
@@ -213,9 +213,9 @@ class ToyVae(Vae):
         """
         shape = input_.get_shape().as_list()
         with tf.variable_scope(prefix, reuse=reuse):
-            h0 = ops.linear(opts, input_, 100, 'h0_lin')
+            h0 = ops.linear(opts, input_, 50, 'h0_lin')
             h0 = tf.nn.relu(h0)
-            h1 = ops.linear(opts, h0, 100, 'h1_lin')
+            h1 = ops.linear(opts, h0, 50, 'h1_lin')
             h1 = tf.nn.relu(h1)
             latent_mean = ops.linear(opts, h1, opts['latent_space_dim'], scope='h2_lin')
             log_latent_sigmas = ops.linear(opts, h1, opts['latent_space_dim'], scope='h2_lin_sigma')
@@ -331,11 +331,11 @@ class ToyVae(Vae):
 
             if False and  _epoch > 0 and _epoch % opts['save_every_epoch'] == 0:
                 os.path.join(opts['work_dir'], opts['ckpt_dir'])
-                self._saver.save(self._session,
-                                 os.path.join(opts['work_dir'],
-                                              opts['ckpt_dir'],
-                                              'trained-pot'),
-                                 global_step=counter)
+                #self._saver.save(self._session,
+                #                 os.path.join(opts['work_dir'],
+                #                              opts['ckpt_dir'],
+                #                              'trained-pot'),
+                #                 global_step=counter)
 
             for _idx in xrange(batches_num):
                 # logging.error('Step %d of %d' % (_idx, batches_num ) )
@@ -582,15 +582,15 @@ class ImageVae(Vae):
         self._enc_mean = latent_x_mean
         self._enc_log_var = log_latent_sigmas
 
-        saver = tf.train.Saver(max_to_keep=10)
-        tf.add_to_collection('real_points_ph', self._real_points_ph)
-        tf.add_to_collection('noise_ph', self._noise_ph)
-        tf.add_to_collection('is_training_ph', self._is_training_ph)
-        tf.add_to_collection('encoder_mean', self._enc_mean)
-        tf.add_to_collection('encoder_log_sigma', self._enc_log_var)
-        tf.add_to_collection('decoder', self._generated)
-
-        self._saver = saver
+        #saver = tf.train.Saver(max_to_keep=10)
+        #tf.add_to_collection('real_points_ph', self._real_points_ph)
+        #tf.add_to_collection('noise_ph', self._noise_ph)
+        #tf.add_to_collection('is_training_ph', self._is_training_ph)
+        #tf.add_to_collection('encoder_mean', self._enc_mean)
+        #tf.add_to_collection('encoder_log_sigma', self._enc_log_var)
+        #tf.add_to_collection('decoder', self._generated)
+#
+ #       self._saver = saver
 
         logging.error("Building Graph Done.")
 
@@ -621,11 +621,11 @@ class ImageVae(Vae):
 
             if _epoch > 0 and _epoch % opts['save_every_epoch'] == 0:
                 os.path.join(opts['work_dir'], opts['ckpt_dir'])
-                self._saver.save(self._session,
-                                 os.path.join(opts['work_dir'],
-                                              opts['ckpt_dir'],
-                                              'trained-pot'),
-                                 global_step=counter)
+                #self._saver.save(self._session,
+                #                 os.path.join(opts['work_dir'],
+                #                              opts['ckpt_dir'],
+                #                              'trained-pot'),
+                #                 global_step=counter)
 
             for _idx in xrange(batches_num):
                 # logging.error('Step %d of %d' % (_idx, batches_num ) )
@@ -642,14 +642,14 @@ class ImageVae(Vae):
                                self._is_training_ph: True})
                 counter += 1
 
-                if opts['verbose'] and counter % opts['plot_every'] == 0:
+                if False and opts['verbose'] and counter % opts['plot_every'] == 0:
                     debug_str = 'Epoch: %d/%d, batch:%d/%d' % (
                         _epoch+1, opts['gan_epoch_num'], _idx+1, batches_num)
                     debug_str += '  [L=%.2g, Recon=%.2g, KLQ=%.2g]' % (
                         loss, loss_reconstruct, loss_kl)
                     logging.error(debug_str)
 
-                if opts['verbose'] and counter % opts['plot_every'] == 0:
+                if False and opts['verbose'] and counter % opts['plot_every'] == 0:
                     metrics = Metrics()
                     points_to_plot = self._run_batch(
                         opts, self._generated, self._noise_ph,
@@ -676,13 +676,13 @@ class ImageVae(Vae):
                         prefix='reconstr_e%04d_mb%05d_' % (_epoch, _idx))
                 if opts['early_stop'] > 0 and counter > opts['early_stop']:
                     break
-        if _epoch > 0:
-            os.path.join(opts['work_dir'], opts['ckpt_dir'])
-            self._saver.save(self._session,
-                             os.path.join(opts['work_dir'],
-                                          opts['ckpt_dir'],
-                                          'trained-pot-final'),
-                             global_step=counter)
+        #if _epoch > 0:
+        #    os.path.join(opts['work_dir'], opts['ckpt_dir'])
+        #    self._saver.save(self._session,
+        #                     os.path.join(opts['work_dir'],
+        #                                  opts['ckpt_dir'],
+        #                                  'trained-pot-final'),
+        #                     global_step=counter)
 
     def _sample_internal(self, opts, num):
         """Sample from the trained GAN model.

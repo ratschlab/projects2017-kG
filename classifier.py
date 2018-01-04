@@ -218,6 +218,12 @@ class ToyClassifier(Classifier):
                 ids = np.random.choice(self._data.num_points, opts['batch_size_classifier'],
                                        replace=False, p = self._data_weights)
                 batch_real_images = self._data.data[ids]
+                
+                #if np.random.rand()<0.01:
+                #    swap_batch = np.copy(batch_fake_images)
+                #    batch_fake_images = np.copy(batch_real_images)
+                #    batch_real_images = np.copy(swap_batch)
+                
                 _ = self._session.run(
                     self._c_optim,
                     feed_dict={self._real_points_ph: batch_real_images,
@@ -235,7 +241,7 @@ class ImageClassifier(Classifier):
 
     """
 
-    def __init__(self, opts, data):
+    def __init__(self, opts, data, data_weights = None):
 
         # One more placeholder for batch norm
         self._is_training_ph = None
@@ -362,9 +368,9 @@ class ImageClassifier(Classifier):
             self._is_training_ph, False)
 
         # Evaluating trained classifier on fake points
-        res_fake = self._run_batch(
-            opts, self._c_training,
-            self._real_points_ph, fake_images,
-            self._is_training_ph, False)
-        return res, res_fake
+        #res_fake = self._run_batch(
+        #    opts, self._c_training,
+        #    self._real_points_ph, fake_images,
+        #    self._is_training_ph, False)
+        return res, None #res_fake
 
