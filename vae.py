@@ -20,13 +20,15 @@ class Vae(object):
     """A base class for running individual VAEs.
 
     """
-    def __init__(self, opts, data, weights):
+    def __init__(self, opts, data, weights, test_data = None, test_weights = None):
 
         # Create a new session with session.graph = default graph
         self._session = tf.Session()
         self._trained = False
         self._data = data
         self._data_weights = np.copy(weights)
+        self._test_data = test_data
+        self._test_weights = np.copy(test_weights)
         # Latent noise sampled ones to apply decoder while training
         self._noise_for_plots = utils.generate_noise(opts, 500)
         # Placeholders
@@ -601,6 +603,8 @@ class ImageVae(Vae):
         """
 
         batches_num = self._data.num_points / opts['batch_size']
+        if opts['one_batch'] == True:
+            batches_num = 1.
         train_size = self._data.num_points
         num_plot = 320
         sample_prev = np.zeros([num_plot] + list(self._data.data_shape))
@@ -695,4 +699,21 @@ class ImageVae(Vae):
         return sample
 
 
-
+    def test(self, opts):
+        num_pts = len(self.test_data)
+        batch_noise = utils.generate_noise(opts, num_pts)
+        loss, loss_kl, loss_reconstruct = self._session.run([self._loss, self._loss_kl,self._loss_reconstruct],
+                feed_dict={self._real_points_ph: self.test_data,
+                        self._noise_ph: batch_noise,
+                        self._is_training_ph: False}
+                    )
+        return [loss, loss_kl, loss_reconstruct]
+    
+    def loss_pt(self, opts, x):
+        batch_noise = utils.generate_noise(opts, 1)
+        loss, loss_kl, loss_reconstruct = self._session.run([self._loss, self._loss_kl,self._loss_reconstruct],
+                feed_dict={self._real_points_ph: x,
+                        self._noise_ph: batch_noise,
+                        self._is_training_ph: False}
+                    )
+        return [loss, loss_kl, loss_reconstruct]

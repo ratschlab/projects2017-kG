@@ -67,6 +67,8 @@ class DataHandler(object):
         """
         if opts['dataset'] == 'mnist':
             self._load_mnist(opts)
+        elif opts['dataset'] == 'mnist_test':
+            self._load_mnist_test(opts)
         elif opts['dataset'] == 'mnist3':
             self._load_mnist3(opts)
         elif opts['dataset'] == 'gmm':
@@ -254,23 +256,71 @@ class DataHandler(object):
         tr_Y = np.asarray(tr_Y)
         te_Y = np.asarray(te_Y)
 
-        X = np.concatenate((tr_X, te_X), axis=0)
-        y = np.concatenate((tr_Y, te_Y), axis=0)
+        #X = np.concatenate((tr_X, te_X), axis=0)
+        #y = np.concatenate((tr_Y, te_Y), axis=0)
 
         seed = 123
         np.random.seed(seed)
-        np.random.shuffle(X)
+        np.random.shuffle(tr_X)
         np.random.seed(seed)
-        np.random.shuffle(y)
+        np.random.shuffle(tr_Y)
         np.random.seed()
 
         self.data_shape = (28, 28, 1)
-        self.data = X / 255.
-        self.labels = y
-        self.num_points = len(X)
+        self.data = tr_X / 255.
+        self.labels = tr_Y
+        self.num_points = len(tr_X)
 
         logging.debug('Loading Done.')
 
+    def _load_mnist_test(self, opts):
+        """Load data from MNIST files.
+
+        """
+        logging.debug('Loading MNIST')
+        data_dir = self._data_dir(opts)
+        # pylint: disable=invalid-name
+        # Let us use all the bad variable names!
+        tr_X = None
+        tr_Y = None
+        te_X = None
+        te_Y = None
+
+        with utils.o_gfile((data_dir, 'train-images-idx3-ubyte'), 'rb') as fd:
+            loaded = np.frombuffer(fd.read(), dtype=np.uint8)
+            tr_X = loaded[16:].reshape((60000, 28, 28, 1)).astype(np.float)
+
+        with utils.o_gfile((data_dir, 'train-labels-idx1-ubyte'), 'rb') as fd:
+            loaded = np.frombuffer(fd.read(), dtype=np.uint8)
+            tr_Y = loaded[8:].reshape((60000)).astype(np.int)
+
+        with utils.o_gfile((data_dir, 't10k-images-idx3-ubyte'), 'rb') as fd:
+            loaded = np.frombuffer(fd.read(), dtype=np.uint8)
+            te_X = loaded[16:].reshape((10000, 28, 28, 1)).astype(np.float)
+
+        with utils.o_gfile((data_dir, 't10k-labels-idx1-ubyte'), 'rb') as fd:
+            loaded = np.frombuffer(fd.read(), dtype=np.uint8)
+            te_Y = loaded[8:].reshape((10000)).astype(np.int)
+
+        tr_Y = np.asarray(tr_Y)
+        te_Y = np.asarray(te_Y)
+
+        #X = np.concatenate((tr_X, te_X), axis=0)
+        #y = np.concatenate((tr_Y, te_Y), axis=0)
+
+        seed = 123
+        np.random.seed(seed)
+        np.random.shuffle(te_X)
+        np.random.seed(seed)
+        np.random.shuffle(te_Y)
+        np.random.seed()
+
+        self.data_shape = (28, 28, 1)
+        self.data = te_X / 255.
+        self.labels = te_Y
+        self.num_points = len(te_X)
+
+        logging.debug('Loading Done.')
     def _load_mnist3(self, opts):
         """Load data from MNIST files.
 

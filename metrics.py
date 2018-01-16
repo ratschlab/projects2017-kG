@@ -725,3 +725,59 @@ class Metrics(object):
         plt.close()
 
         return True
+    
+    def evaluate_mnist_classes(self, opts, fake_points):
+        assert len(fake_points) > 0, 'No fake digits to evaluate'
+        num_fake = len(fake_points)
+
+        # Classifying points with pre-trained model.
+        # Pre-trained classifier assumes inputs are in [0, 1.]
+        # There may be many points, so we will sess.run
+        # in small chunks.
+
+        result = []
+        result_probs = []
+        result_is_confident = []
+        with tf.Graph().as_default() as g:
+            model_file = os.path.join(opts['trained_model_path'],
+                                      opts['mnist_trained_model_file'])
+            saver = tf.train.import_meta_graph(model_file + '.meta')
+            with tf.Session().as_default() as sess:
+                saver.restore(sess, model_file)
+                input_ph = tf.get_collection('X_')
+                assert len(input_ph) > 0, 'Failed to load pre-trained model'
+                # Input placeholder
+                input_ph = input_ph[0]
+                dropout_keep_prob_ph = tf.get_collection('keep_prob')
+                assert len(dropout_keep_prob_ph) > 0, 'Failed to load pre-trained model'
+                dropout_keep_prob_ph = dropout_keep_prob_ph[0]
+                trained_net = tf.get_collection('prediction')
+                assert len(trained_net) > 0, 'Failed to load pre-trained model'
+                # Predicted digit
+                trained_net = trained_net[0]
+                logits = tf.get_collection('y_hat')
+                assert len(logits) > 0, 'Failed to load pre-trained model'
+                # Resulting 10 logits
+                logits = logits[0]
+                prob_max = tf.reduce_max(tf.nn.softmax(logits),
+                                         reduction_indices=[1])
+
+                batch_size = opts['tf_run_batch_size']
+                batches_num = int(np.ceil((num_fake + 0.) / batch_size))
+                thresh = opts['digit_classification_threshold']
+                for idx in xrange(batches_num):
+                    end_idx = min(num_fake, (idx + 1) * batch_size)
+                    batch_fake = fake_points[idx * batch_size:end_idx]
+                    _res, prob = sess.run(
+                        [trained_net, prob_max],
+                        feed_dict={input_ph: batch_fake,
+                                   dropout_keep_prob_ph: 1.})
+                    result.append(_res)
+                    result_probs.append(prob)
+                    result_is_confident.append(prob > thresh)
+                result = np.hstack(result)
+                result_probs = np.hstack(result_probs)
+                result_is_confident = np.hstack(result_is_confident)
+                assert len(result) == num_fake
+                assert len(result_probs) == num_fake
+        return result

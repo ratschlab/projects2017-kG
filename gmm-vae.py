@@ -18,17 +18,17 @@ from kGAN import KGANS
 import pdb
 
 flags = tf.app.flags
-flags.DEFINE_float("g_learning_rate", 0.005,
-                   "Learning rate for Generator optimizers [16e-4]")
-flags.DEFINE_float("d_learning_rate", 0.0001,
-                   "Learning rate for Discriminator optimizers [4e-4]")
-flags.DEFINE_float("learning_rate", 0.0008,
+#flags.DEFINE_float("g_learning_rate", 0.005,
+#                   "Learning rate for Generator optimizers [16e-4]")
+#flags.DEFINE_float("d_learning_rate", 0.0001,
+#                   "Learning rate for Discriminator optimizers [4e-4]")
+flags.DEFINE_float("learning_rate", 0.005,
                    "Learning rate for other optimizers [8e-4]")
 flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]")
 flags.DEFINE_integer("zdim", 5, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.8, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights") #'soft', 'hard'
-flags.DEFINE_string("workdir", 'results_gmm_uniform_retrain_long_9_prova', "Working directory ['results']")
+flags.DEFINE_string("workdir", 'results_gmm_lsq_final2', "Working directory ['results']")
 flags.DEFINE_bool("vae", True, "use VAEs instead of GANs")
 FLAGS = flags.FLAGS
 
@@ -56,7 +56,7 @@ def main():
     opts['banana'] = True #skew the gaussians a bit
     
     # kGANs opts
-    opts["gan_epoch_num_first_iteration"] = 1000
+    opts["gan_epoch_num_first_iteration"] = 100
     opts["gan_epoch_num"] = opts["gan_epoch_num_first_iteration"]
     opts["gan_epoch_num_except_first"] = 10
     opts["mixture_c_epoch_num"] = 5
@@ -65,13 +65,13 @@ def main():
     opts['assignment'] = FLAGS.assignment
     opts['number_of_steps_made'] = 0
     opts['number_of_kGANs'] = 9
-    opts['kGANs_number_rounds'] = 1000
+    opts['kGANs_number_rounds'] = 300
     opts['kill_threshold'] = 0.00003 #if mixture weight is less than threshold first reinitialize (if reinitialize) then kill
     opts['annealed'] = True
     opts['number_of_gpus'] = len(get_available_gpus()) # set to 1 if don't want parallel computation
     opts['reinitialize'] = False #when a gan die want to delete it (False) or re-initialize it (True)
     opts['one_batch'] = False# update weights every batch (True) or every epoch (False)
-    
+    opts['test'] = False #hack, don't set to true
     #VAE opts 
     opts['vae_sigma'] = 0.01
     opts['vae'] = FLAGS.vae
@@ -100,8 +100,8 @@ def main():
     opts["batch_size"] = 32
     opts["batch_size_classifier"] = 32
     opts['opt_learning_rate'] = FLAGS.learning_rate
-    opts['opt_d_learning_rate'] = FLAGS.d_learning_rate
-    opts['opt_g_learning_rate'] = FLAGS.g_learning_rate
+    #opts['opt_d_learning_rate'] = FLAGS.d_learning_rate
+    #opts['opt_g_learning_rate'] = FLAGS.g_learning_rate
     opts["opt_beta1"] = FLAGS.adam_beta1
     opts['batch_norm_eps'] = 1e-05
     opts['batch_norm_decay'] = 0.9
@@ -131,7 +131,6 @@ def main():
         logging.debug('Running step %03d' %(step))
         kG.make_step(opts, data)
         opts["gan_epoch_num"] = opts["gan_epoch_num_except_first"]
-        opts["mixture_c_epoch_num"] = 1
 
         
         num_fake = opts['eval_points_num']

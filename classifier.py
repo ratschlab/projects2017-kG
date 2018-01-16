@@ -373,4 +373,11 @@ class ImageClassifier(Classifier):
         #    self._real_points_ph, fake_images,
         #    self._is_training_ph, False)
         return res, None #res_fake
+    
+    def classify(self,opts,data):
 
+        res = self._run_batch(
+            opts, self._c_training,
+            self._real_points_ph, data,
+            self._is_training_ph, False)
+        return res
