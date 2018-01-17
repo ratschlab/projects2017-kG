@@ -64,7 +64,7 @@ class KGANS(object):
             gan_class = GAN.ImageVae
             self._classifier = CLASSIFIER.ImageClassifier
             self.loss = np.zeros(opts["kGANs_number_rounds"])
-            self.train_loss = np.zeros(opts["kGANs_number_rounds"])
+            self.train_loss = np.zeros(2*opts["kGANs_number_rounds"])
         else:
             assert False, "We don't have any other GAN implementation yet..."
         
@@ -94,27 +94,28 @@ class KGANS(object):
             #        self._k_class.append(self._classifier(opts, data))
 
 
-    def _kill_a_gan(self, opts, data, idx):
-        '''this function kills the gan indexed with idx'''
-        opts['number_of_kGANs'] -= 1
-        self._number_of_kGANs = opts['number_of_kGANs']
-        self._mixture_weights = np.delete(self._mixture_weights, idx, 1)
-        self._mixture_weights /= np.sum(self._mixture_weights)
-        self._data_weights = np.delete(self._data_weights, idx, 1)
-        del self._graphs[idx]
-        del self._kGANs[idx]
+    #def _kill_a_gan(self, opts, data, idx):
+    #    '''this function kills the gan indexed with idx'''
+    #    opts['number_of_kGANs'] -= 1
+    #    self._number_of_kGANs = opts['number_of_kGANs']
+    #    self._mixture_weights = np.delete(self._mixture_weights, idx, 1)
+    #    self._mixture_weights /= np.sum(self._mixture_weights)
+    #    self._data_weights = np.delete(self._data_weights, idx, 1)
+    #    self._hard_assigned = np.delete(self._hard_assigned, idx, 1)
+    #    del self._graphs[idx]
+    #    del self._kGANs[idx]
 
-    def _re_initialize(self, opts, data, idx):
-        '''reinitialize a gan, it can only be done once'''
-        self._graphs[idx] = tf.Graph()
-        with self._graphs[idx].as_default():
-            dev = idx%opts['number_of_gpus']
-            with tf.device('/device:GPU:%d' %dev):
-                self._kGANs[idx] = self._gan_class(opts, data, self._data_weights[:,idx])
-                for i in range(0,opts['number_of_steps_made']):
-                    self._kGANs[idx].train(opts)
-        if self._assignment == 'soft':
-            self._update_data_weights_soft(opts, data)
+    #def _re_initialize(self, opts, data, idx):
+    #    '''reinitialize a gan, it can only be done once'''
+    #    self._graphs[idx] = tf.Graph()
+    #    with self._graphs[idx].as_default():
+    #        dev = idx%opts['number_of_gpus']
+    #        with tf.device('/device:GPU:%d' %dev):
+    #            self._kGANs[idx] = self._gan_class(opts, data, self._data_weights[:,idx])
+    #            for i in range(0,opts['number_of_steps_made']):
+    #                self._kGANs[idx].train(opts)
+    #    if self._assignment == 'soft':
+    #        self._update_data_weights_soft(opts, data)
 
     def _internal_step(self, (opts, data, k)):
         if self._mixture_weights[0][k] != 0:
@@ -144,28 +145,28 @@ class KGANS(object):
                 self._update_data_weights_soft(opts, data)
         elif self._assignment == 'hard':
             self._update_data_weights_hard(opts, data)
-        killed = False
-        if opts['reinitialize']:
-            '''this mess is to reintialize a gan or finally kill it if it was reinitialized already'''
-            if (np.where(self._mixture_weights[0] < opts['kill_threshold'])[0].size!= 0):
-                idx_to_reinitialize = np.where(self._mixture_weights[0] < opts['kill_threshold'])[0].flatten()#np.argmin(self._mixture_weights[0])
-                for idx in idx_to_reinitialize:
-                    if not self._ever_dead[idx]:
-                        self._ever_dead[idx] = True
-                        self._re_initialize(opts, data, idx)
-                    elif self._mixture_weights[0][idx] < opts['kill_threshold']/2.:
-                        self._kill_a_gan(opts, data, idx)
-                        killed = True
-        else:
-            while (np.where(self._mixture_weights[0] < opts['kill_threshold'])[0].size!= 0):
-                idx_to_kill = np.argmin(self._mixture_weights[0])
-                self._kill_a_gan(opts, data, idx_to_kill)
-                killed = True
-        if killed:
-            if self._assignment == 'soft':
-                self._update_data_weights_soft(opts, data)
-            elif self._assignment == 'hard':
-                self._update_data_weights_hard(opts, data)
+        #killed = False
+        #if opts['reinitialize']:
+        #    '''this mess is to reintialize a gan or finally kill it if it was reinitialized already'''
+        #    if (np.where(self._mixture_weights[0] < opts['kill_threshold'])[0].size!= 0):
+        #        idx_to_reinitialize = np.where(self._mixture_weights[0] < opts['kill_threshold'])[0].flatten()#np.argmin(self._mixture_weights[0])
+        #        for idx in idx_to_reinitialize:
+        #            if not self._ever_dead[idx]:
+        #                self._ever_dead[idx] = True
+        #                self._re_initialize(opts, data, idx)
+        #            elif self._mixture_weights[0][idx] < opts['kill_threshold']/2.:
+        #                self._kill_a_gan(opts, data, idx)
+        #                killed = True
+        #else:
+        #    while (np.where(self._mixture_weights[0] < opts['kill_threshold'])[0].size!= 0):
+        #        idx_to_kill = np.argmin(self._mixture_weights[0])
+        #        self._kill_a_gan(opts, data, idx_to_kill)
+        #        killed = True
+        #if killed:
+        #    if self._assignment == 'soft':
+        #        self._update_data_weights_soft(opts, data)
+        #    elif self._assignment == 'hard':
+        #        self._update_data_weights_hard(opts, data)
         
         if np.abs(np.sum(self._mixture_weights)-1) > 0.001:
             assert np.abs(np.sum(self._mixture_weights)-1) <= 0.001, 'mixture weights dont sum to 1.. something went wrong'
@@ -193,65 +194,67 @@ class KGANS(object):
         update the data weights with the soft assignments for the kGAN object
         """
         # compute p(x | gan)
-        if opts['dataset'] == 'mnist' and opts['number_of_steps_made']>=1:
-            tot_loss = 0.
-            for k in range(0,opts['number_of_kGANs']):
-                if self._kGANs[k].test_data.shape[0]  >= 1:
-                    loss, _, _ = self._kGANs[k].test(opts)
-                    tot_loss += loss*self._kGANs[k].test_data.shape[0]/self._data_num
-                    self._kGANs[k].test_data = None
-            print("----- training loss after model training------")
-            print(tot_loss)
-            self.train_loss[self.idx_loss] = tot_loss
-            self.idx_loss += 1 
-            self.loss[opts['number_of_steps_made']] = self.test_mnist(opts,data, self.data_test)
-            print 'loss: ' 
-            print self.loss[opts['number_of_steps_made']]
+        #if opts['dataset'] == 'mnist' and opts['number_of_steps_made']>=1:
+        #    tot_loss = 0.
+        #    for k in range(0,opts['number_of_kGANs']):
+        #        if self._kGANs[k].test_data.shape[0]  >= 1:
+        #            loss, _, _ = self._kGANs[k].test(opts)
+        #            tot_loss += loss*self._kGANs[k].test_data.shape[0]/self._data_num
+        #            self._kGANs[k].test_data = None
+        #    print("----- training loss after model training------")
+        #    print(tot_loss)
+        #    self.train_loss[self.idx_loss] = tot_loss
+        #    self.idx_loss += 1 
+        #    self.loss[opts['number_of_steps_made']] = self.test_mnist(opts,data, self.data_test)
+        #    print 'loss: ' 
+        #    print self.loss[opts['number_of_steps_made']]
         prob_x_given_gan = self._prob_data_under_gan(opts, data)
         # compute pi and alpha
         # pi_x(j) = 1/Z (alpha_j p(x | g_j))^temperature + smoothing
-        annealing = 1.
-        if opts['annealed']:
-            annealing = min(1.,(1. + opts['number_of_steps_made']*1.)/opts["kGANs_number_rounds"])
+        #annealing = 1.
+        #if opts['annealed']:
+        #    annealing = min(1.,(1. + opts['number_of_steps_made']*1.)/opts["kGANs_number_rounds"])
         
-        pi = np.power(prob_x_given_gan * np.repeat(self._mixture_weights,self._data_weights.shape[0],axis = 0), annealing)
-        pi = np.minimum(1., pi + opts['smoothing'])
-        pi /= pi.sum(axis = 1, keepdims = True)
+        #pi = np.power(prob_x_given_gan * np.repeat(self._mixture_weights,self._data_weights.shape[0],axis = 0), annealing)
+        #pi = np.minimum(1., pi + opts['smoothing'])
+        #pi /= pi.sum(axis = 1, keepdims = True)
         
         # Compute Gan probability
-        self._mixture_weights = pi.sum(axis = 0, keepdims = True)
-        self._mixture_weights /= np.sum(self._mixture_weights)
-        print self._mixture_weights
+        #self._mixture_weights = pi.sum(axis = 0, keepdims = True)
+        #self._mixture_weights /= np.sum(self._mixture_weights)
+        #print self._mixture_weights
         
         #_data_weights = pi/(N*alpha) commented these two lines to do uniform weights
         #self._data_weights = pi / np.repeat(self._mixture_weights,self._data_weights.shape[0],axis = 0)
         #self._data_weights /= self._data_weights.sum(axis = 0, keepdims = True)
         new_weights = np.ones(prob_x_given_gan.shape)*0.
         
-        if opts['dataset'] == 'mnist':
-            new_weights_norepeat = np.ones(prob_x_given_gan.shape)*0.
+        #if opts['dataset'] == 'mnist':
+        #    new_weights_norepeat = np.ones(prob_x_given_gan.shape)*0.
             #for i in range(0,self._data_num):
             #    j = np.random.choice(opts['number_of_kGANs'], size=1, p=pi[i,:])    
             #    new_weights[i,j] = 1. 
         
             # the new weights is a hard assignment, therefore, we assigne the point to the gan
             # with maximum likelihood p(x|gan) (see report/hard assignment)
-            new_weights_norepeat[np.arange(len(prob_x_given_gan)), prob_x_given_gan.argmax(1)] = 1.
-            tot_loss = 0.
-            for k in range(0,opts['number_of_kGANs']):
-                assigned = data.data[np.argwhere(new_weights_norepeat[:,k]==1).flatten()]
-                if assigned.shape[0] >= 1:
-                    self._kGANs[k].test_data = assigned
-                    loss, _, _ = self._kGANs[k].test(opts)
-                    tot_loss += loss*assigned.shape[0]/new_weights.shape[0]
-            print("----- training loss after assignment ------")
-            print(tot_loss)
-            self.train_loss[self.idx_loss] = tot_loss
-            self.idx_loss += 1
+        #    new_weights_norepeat[np.arange(len(prob_x_given_gan)), prob_x_given_gan.argmax(1)] = 1.
+        #    tot_loss = 0.
+        #    for k in range(0,opts['number_of_kGANs']):
+        #        assigned = data.data[np.argwhere(new_weights_norepeat[:,k]==1).flatten()]
+        #        if assigned.shape[0] >= 1:
+        #            self._kGANs[k].test_data = assigned
+        #            loss, _, _ = self._kGANs[k].test(opts)
+        #            tot_loss += loss*assigned.shape[0]/new_weights.shape[0]
+        #        self._kGANs[k].test_data = None
+        #    print("----- training loss after assignment ------")
+        #    print(tot_loss)
+        #    self.train_loss[self.idx_loss] = tot_loss
+        #    self.idx_loss += 1
         max_values = np.transpose(np.repeat([np.amax(prob_x_given_gan, axis = 1)], opts['number_of_kGANs'], axis = 0))
         new_weights[prob_x_given_gan == max_values] = 1.
         self._hard_assigned = new_weights.sum(axis = 0, keepdims = True)
         print self._hard_assigned
+        self._mixture_weights = np.copy(self._hard_assigned)/self._data_num
         new_weights /= np.maximum(1., self._hard_assigned)
         # update data weights in eahc gan for the importance sampling 
         for k in range (0,self._number_of_kGANs):
@@ -268,9 +271,9 @@ class KGANS(object):
             for k in range (0,self._number_of_kGANs):
                 wm[:,k] = self._kGANs[k]._data_weights
 
-            sampled = self._sample_from_training(opts,data, wm, 50)
+            #sampled = self._sample_from_training(opts,data, wm, 50)
             metrics = Metrics()
-            metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  wm, prefix = "train")    
+            #metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  wm, prefix = "train")    
             self._mnist_label_proportions( opts, data, metrics)
             #self.tsne_plotter(opts,  data)
             #self.tsne_real_fake(opts,  data)
@@ -280,36 +283,36 @@ class KGANS(object):
             metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  self._data_weights, prefix = "train")    
             self.tsne_real_fake(opts,  data)
     
-    def _update_data_weights_hard(self, opts, data):
-        """ 
-        update the data weights with the hard assignments for the kGAN object
-        """
-        # compute p(x | gan) 
-        prob_x_given_gan = self._prob_data_under_gan(opts, data) #/ np.repeat(self._mixture_weights,self._data_weights.shape[0],axis = 0)*np.sum(self._data_weights)
+    #def _update_data_weights_hard(self, opts, data):
+    #    """ 
+    #    update the data weights with the hard assignments for the kGAN object
+    #    """
+    #    # compute p(x | gan) 
+    #    prob_x_given_gan = self._prob_data_under_gan(opts, data) #/ np.repeat(self._mixture_weights,self._data_weights.shape[0],axis = 0)*np.sum(self._data_weights)
+    #    
+    #    #compute the argmax of the prob_x_given_gan
+    #    new_weights = np.ones(prob_x_given_gan.shape)*0.
+    #    new_weights[np.arange(len(prob_x_given_gan)), prob_x_given_gan.argmax(1)] = 1.
         
-        #compute the argmax of the prob_x_given_gan
-        new_weights = np.ones(prob_x_given_gan.shape)*0.
-        new_weights[np.arange(len(prob_x_given_gan)), prob_x_given_gan.argmax(1)] = 1.
-        
-        #alpha_k = N_k / N 
-        self._mixture_weights = new_weights.sum(axis = 0, keepdims = True)/np.sum(new_weights)
-        print self._mixture_weights
-        new_weights /= new_weights.sum(axis = 0, keepdims = True) 
-        self._data_weights = np.copy(new_weights)
-        
-        # update data weights in eahc gan for the importance sampling 
-        for k in range (0,self._number_of_kGANs):
-            self._kGANs[k]._data_weights = self._data_weights[:,k]
-        
-        #print plots
-        if (opts['dataset'] == 'gmm'):
-            self._plot_competition_2d(opts)
-            self._plot_distr_2d(opts)
-        elif(opts['dataset'] == 'mnist'):
-            sampled = self._sample_from_training(opts,data, self._data_weights, 50)
-            metrics = Metrics()
-            metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  self._data_weights, prefix = "train")
-            self.tsne_plotter(opts,  data)
+    #    #alpha_k = N_k / N 
+    #    self._mixture_weights = new_weights.sum(axis = 0, keepdims = True)/np.sum(new_weights)
+    #    print self._mixture_weights
+    #    new_weights /= new_weights.sum(axis = 0, keepdims = True) 
+    #    self._data_weights = np.copy(new_weights)
+    #    
+    #    # update data weights in eahc gan for the importance sampling 
+    #    for k in range (0,self._number_of_kGANs):
+    #        self._kGANs[k]._data_weights = self._data_weights[:,k]
+    #    
+    #    #print plots
+    #    if (opts['dataset'] == 'gmm'):
+    #        self._plot_competition_2d(opts)
+    #        self._plot_distr_2d(opts)
+    #    elif(opts['dataset'] == 'mnist'):
+    #        sampled = self._sample_from_training(opts,data, self._data_weights, 50)
+    #        metrics = Metrics()
+    #        metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  self._data_weights, prefix = "train")
+    #        self.tsne_plotter(opts,  data)
 
     def _sample_from_training(self, opts, data, probs, num_pts):
         """sample num_pts from the training set with importance sampling"""
@@ -336,7 +339,7 @@ class KGANS(object):
         elif self._assignment == 'hard':
             p_k = 1./(self._data_num*self._mixture_weights[0][k])*np.transpose((1. - D_k)/(D_k + 1e-12))
             
-        return p_k / p_k.sum(keepdims = True)
+        return p_k #/ p_k.sum(keepdims = True)
 
     def _prob_data_under_gan(self, opts, data):
         """compute p(x_train | gan j) for each gan and store it in self._prob_x_given_gan
@@ -499,22 +502,19 @@ class KGANS(object):
             labels = np.append(labels, np.ones(num_pts)*k)
         return sampled, labels
     def _mnist_label_proportions(self, opts, data, metrics):
-        num_pts = int(self._hard_assigned[0][0] )
-        data_ids = np.random.choice(self._data_num, num_pts,replace=False, p=self._kGANs[0]._data_weights)
-        samp =  data.data[data_ids].astype(np.float)
-        labels = metrics.evaluate_mnist_classes(opts,samp)
         rez = np.zeros(10)
-        for i in labels: rez[i]+=1
 
-        for k in range(1, self._number_of_kGANs):
+        for k in range(0, self._number_of_kGANs):
             num_pts = int(self._hard_assigned[0][k] )
-            data_ids = np.random.choice(self._data_num, num_pts,replace=False, p=self._kGANs[k]._data_weights)
-            samp =  data.data[data_ids].astype(np.float)
-            labels = metrics.evaluate_mnist_classes(opts,samp)
-            counts = np.zeros(10)
-            for i in labels: counts[i]+=1
-            rez = np.vstack((rez,counts))
+            if num_pts >0:
+                data_ids = np.random.choice(self._data_num, num_pts,replace=False, p=self._kGANs[k]._data_weights)
+                samp =  data.data[data_ids].astype(np.float)
+                labels = metrics.evaluate_mnist_classes(opts,samp)
+                counts = np.zeros(10)
+                for i in labels: counts[i]+=1
+                rez = np.vstack((rez,counts))
         #print rez
+        rez = np.delete(rez, 0, 0)
         rez/=rez.sum(axis = 0, keepdims = True)
         import matplotlib.pyplot as plt
         fig, ax =  plt.subplots()
