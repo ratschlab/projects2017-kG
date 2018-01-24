@@ -28,7 +28,7 @@ flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]"
 flags.DEFINE_integer("zdim", 5, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.8, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights") #'soft', 'hard'
-flags.DEFINE_string("workdir", 'results_gmm_lsq_final2', "Working directory ['results']")
+flags.DEFINE_string("workdir", 'results_gmm', "Working directory ['results']")
 flags.DEFINE_bool("vae", True, "use VAEs instead of GANs")
 FLAGS = flags.FLAGS
 
@@ -46,7 +46,7 @@ def main():
     # dataset opts 
     opts['random_seed'] = 821
     opts['dataset'] = 'gmm' # gmm, circle_gmm,  mnist, mnist3 ...
-    opts['gmm_modes_num'] = 9
+    opts['gmm_modes_num'] = 3
     opts['gmm_max_val'] = 15.
     opts['toy_dataset_size'] = 64 * 1000 
     opts['toy_dataset_dim'] = 2
@@ -58,26 +58,27 @@ def main():
     # kGANs opts
     opts["gan_epoch_num_first_iteration"] = 100
     opts["gan_epoch_num"] = opts["gan_epoch_num_first_iteration"]
-    opts["gan_epoch_num_except_first"] = 10
-    opts["mixture_c_epoch_num"] = 5
+    opts["gan_epoch_num_except_first"] = 1
+    opts["mixture_c_epoch_num"] = 1
     opts['smoothing'] = 0.000001
     opts['plot_kGANs'] = False #do not set to True
     opts['assignment'] = FLAGS.assignment
     opts['number_of_steps_made'] = 0
-    opts['number_of_kGANs'] = 9
-    opts['kGANs_number_rounds'] = 300
+    opts['number_of_kGANs'] = 3
+    opts['kGANs_number_rounds'] = 1
     opts['kill_threshold'] = 0.00003 #if mixture weight is less than threshold first reinitialize (if reinitialize) then kill
     opts['annealed'] = True
     opts['number_of_gpus'] = len(get_available_gpus()) # set to 1 if don't want parallel computation
     opts['reinitialize'] = False #when a gan die want to delete it (False) or re-initialize it (True)
     opts['one_batch'] = False# update weights every batch (True) or every epoch (False)
+    opts['one_batch_class'] = False# update weights every batch (True) or every epoch (False)
     opts['test'] = False #hack, don't set to true
     #VAE opts 
     opts['vae_sigma'] = 0.01
     opts['vae'] = FLAGS.vae
     opts['recon_loss'] = 'l2sq'
     opts['decay_schedule'] = 'manual'
-
+    opts['number_units'] = 50
     # GAN opts
     opts["init_std"] = FLAGS.init_std
     opts["init_bias"] = 0.0
@@ -132,24 +133,25 @@ def main():
         kG.make_step(opts, data)
         opts["gan_epoch_num"] = opts["gan_epoch_num_except_first"]
 
-        
-        num_fake = opts['eval_points_num']
-        logging.debug('Sampling fake points')
-        num_fake_points = 500*opts['number_of_kGANs']
-        fake_points, num_samples_gans = kG.sample_mixture_separate_color(opts, num_fake_points)
-        logging.debug('Sampling more fake points')
-        
-        more_fake_points = kG.sample_mixture(opts, 500)
+        #opts['one_batch'] = True
+        opts['one_batch_class'] = True
+        if step%1 ==0:
+            num_fake = opts['eval_points_num']
+            logging.debug('Sampling fake points')
+            num_fake_points = 500*opts['number_of_kGANs']
+            fake_points, num_samples_gans = kG.sample_mixture_separate_color(opts, num_fake_points)
+            logging.debug('Sampling more fake points')
+            
+            more_fake_points = kG.sample_mixture(opts, 500)
 
-        logging.debug('Plotting results')
-        opts['plot_kGANs'] = True #hack to print
-        
-        metrics.make_plots(opts, step, data.data[:10000],
+            logging.debug('Plotting results')
+            opts['plot_kGANs'] = True #hack to print
+            metrics.make_plots(opts, step, data.data[:10000],
                 fake_points, weights = num_samples_gans)
         
-        (likelihood, C) = metrics.evaluate(
-            opts, step, data.data[:500],
-            fake_points, more_fake_points, prefix='')
+            (likelihood, C) = metrics.evaluate(
+                opts, step, data.data[:500],
+                fake_points, more_fake_points, prefix='')
     logging.debug("kGANs finished working!")
     
 

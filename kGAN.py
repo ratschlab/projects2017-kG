@@ -87,11 +87,11 @@ class KGANS(object):
                     self._kGANs.append(gan_class(opts, data, self._data_weights[:,it]))
                     if opts['dataset'] == 'mnist':
                         self._kGANs[it].test_data = data.data
-            #self._k_class_graphs.append(tf.Graph())
-            #with self._k_class_graphs[it].as_default():
-            #    dev = it%opts['number_of_gpus']
-            #    with tf.device('/device:GPU:%d' %dev):
-            #        self._k_class.append(self._classifier(opts, data))
+            self._k_class_graphs.append(tf.Graph())
+            with self._k_class_graphs[it].as_default():
+                dev = it%opts['number_of_gpus']
+                with tf.device('/device:GPU:%d' %dev):
+                    self._k_class.append(self._classifier(opts, data))
 
 
     #def _kill_a_gan(self, opts, data, idx):
@@ -122,7 +122,6 @@ class KGANS(object):
             with self._graphs[k].as_default():
                 if self._hard_assigned[0][k] > opts['batch_size']:
                     self._kGANs[k].train(opts)
-
     def make_step(self, opts, data):
         """Make step of the kGAN algorithm. First train the GANs on the reweighted training set,
         then update the weights"""
@@ -137,10 +136,10 @@ class KGANS(object):
                     self._plot_competition_2d(opts)
                     self._plot_distr_2d(opts)
                 if opts['dataset'] == 'mnist':
-                    self._kGANs[0].test_data = self.data_test.data
-                    self.loss[opts['number_of_steps_made']], _, _ = self._kGANs[0].test(opts)
+                    #self._kGANs[0].test_data = self.data_test.data
+                    #self.loss[opts['number_of_steps_made']], _, _ = self._kGANs[0].test(opts)
                     print 'loss: ' 
-                    print self.loss[opts['number_of_steps_made']]
+                    #print self.loss[opts['number_of_steps_made']]
             else:
                 self._update_data_weights_soft(opts, data)
         elif self._assignment == 'hard':
@@ -194,20 +193,21 @@ class KGANS(object):
         update the data weights with the soft assignments for the kGAN object
         """
         # compute p(x | gan)
-        #if opts['dataset'] == 'mnist' and opts['number_of_steps_made']>=1:
-        #    tot_loss = 0.
-        #    for k in range(0,opts['number_of_kGANs']):
-        #        if self._kGANs[k].test_data.shape[0]  >= 1:
-        #            loss, _, _ = self._kGANs[k].test(opts)
-        #            tot_loss += loss*self._kGANs[k].test_data.shape[0]/self._data_num
-        #            self._kGANs[k].test_data = None
-        #    print("----- training loss after model training------")
-        #    print(tot_loss)
-        #    self.train_loss[self.idx_loss] = tot_loss
-        #    self.idx_loss += 1 
-        #    self.loss[opts['number_of_steps_made']] = self.test_mnist(opts,data, self.data_test)
-        #    print 'loss: ' 
-        #    print self.loss[opts['number_of_steps_made']]
+        if opts['dataset'] == 'mnist' and opts['number_of_steps_made']>=1:
+            #tot_loss = 0.
+            #for k in range(0,opts['number_of_kGANs']):
+            #    self._kGANs[k].test_data = data.data
+            #    if self._kGANs[k].test_data.shape[0]  >= 1:
+            #        loss, _, _ = self._kGANs[k].test(opts)
+            #        tot_loss += loss*self._kGANs[k].test_data.shape[0]/self._data_num
+            #        self._kGANs[k].test_data = None
+            #print("----- training loss after model training------")
+            #print(tot_loss)
+            #self.train_loss[self.idx_loss] = tot_loss
+            #self.idx_loss += 1 
+            self.loss[opts['number_of_steps_made']] = self.test_mnist(opts,data, self.data_test)
+            print 'test loss: ' 
+            print self.loss[opts['number_of_steps_made']]
         prob_x_given_gan = self._prob_data_under_gan(opts, data)
         # compute pi and alpha
         # pi_x(j) = 1/Z (alpha_j p(x | g_j))^temperature + smoothing
@@ -229,32 +229,34 @@ class KGANS(object):
         #self._data_weights /= self._data_weights.sum(axis = 0, keepdims = True)
         new_weights = np.ones(prob_x_given_gan.shape)*0.
         
-        #if opts['dataset'] == 'mnist':
-        #    new_weights_norepeat = np.ones(prob_x_given_gan.shape)*0.
+        if opts['dataset'] == 'mnist':
+            new_weights_norepeat = np.ones(prob_x_given_gan.shape)*0.
             #for i in range(0,self._data_num):
             #    j = np.random.choice(opts['number_of_kGANs'], size=1, p=pi[i,:])    
             #    new_weights[i,j] = 1. 
         
             # the new weights is a hard assignment, therefore, we assigne the point to the gan
             # with maximum likelihood p(x|gan) (see report/hard assignment)
-        #    new_weights_norepeat[np.arange(len(prob_x_given_gan)), prob_x_given_gan.argmax(1)] = 1.
-        #    tot_loss = 0.
-        #    for k in range(0,opts['number_of_kGANs']):
-        #        assigned = data.data[np.argwhere(new_weights_norepeat[:,k]==1).flatten()]
-        #        if assigned.shape[0] >= 1:
-        #            self._kGANs[k].test_data = assigned
-        #            loss, _, _ = self._kGANs[k].test(opts)
-        #            tot_loss += loss*assigned.shape[0]/new_weights.shape[0]
-        #        self._kGANs[k].test_data = None
-        #    print("----- training loss after assignment ------")
-        #    print(tot_loss)
-        #    self.train_loss[self.idx_loss] = tot_loss
-        #    self.idx_loss += 1
+            new_weights_norepeat[np.arange(len(prob_x_given_gan)), prob_x_given_gan.argmax(1)] = 1.
+            tot_loss = 0.
+            for k in range(0,opts['number_of_kGANs']):
+                assigned = data.data[np.argwhere(new_weights_norepeat[:,k]==1).flatten()]
+                if assigned.shape[0] >= 1:
+                    self._kGANs[k].test_data = assigned
+                    loss, _, _ = self._kGANs[k].test(opts)
+                    tot_loss += loss*assigned.shape[0]/new_weights.shape[0]
+                self._kGANs[k].test_data = None
+            print("----- training loss after assignment ------")
+            print(tot_loss)
+            self.train_loss[self.idx_loss] = tot_loss
+            self.idx_loss += 1
+        
         max_values = np.transpose(np.repeat([np.amax(prob_x_given_gan, axis = 1)], opts['number_of_kGANs'], axis = 0))
         new_weights[prob_x_given_gan == max_values] = 1.
+        #new_weights[np.arange(len(prob_x_given_gan)), prob_x_given_gan.argmax(1)] = 1.
         self._hard_assigned = new_weights.sum(axis = 0, keepdims = True)
         print self._hard_assigned
-        self._mixture_weights = np.copy(self._hard_assigned)/self._data_num
+        self._mixture_weights = np.copy(self._hard_assigned)/self._hard_assigned.sum()
         new_weights /= np.maximum(1., self._hard_assigned)
         # update data weights in eahc gan for the importance sampling 
         for k in range (0,self._number_of_kGANs):
@@ -266,7 +268,7 @@ class KGANS(object):
             print "step done"
             #self._plot_competition_2d(opts)
             #self._plot_distr_2d(opts)
-        elif(opts['dataset'] == 'mnist'):
+        elif(opts['dataset'] == 'mnist') and opts['number_of_steps_made']%opts["plot_every"] ==0:
             wm = np.zeros(self._data_weights.shape)
             for k in range (0,self._number_of_kGANs):
                 wm[:,k] = self._kGANs[k]._data_weights
@@ -326,6 +328,7 @@ class KGANS(object):
 
 
     def _prob_data_under_gan_internal(self, (opts, data, k)):
+        #return self._kGANs[k].loss_pt(opts)*(-1.)
         device = k%opts['number_of_gpus']
         # select gan k
         gan_k = self._kGANs[k]
@@ -339,7 +342,7 @@ class KGANS(object):
         elif self._assignment == 'hard':
             p_k = 1./(self._data_num*self._mixture_weights[0][k])*np.transpose((1. - D_k)/(D_k + 1e-12))
             
-        return p_k #/ p_k.sum(keepdims = True)
+        return p_k / p_k.sum(keepdims = True)
 
     def _prob_data_under_gan(self, opts, data):
         """compute p(x_train | gan j) for each gan and store it in self._prob_x_given_gan
@@ -367,16 +370,23 @@ class KGANS(object):
         Returns:
         (data.num_points,) NumPy array, containing probabilities of 
         true data. I.e., output of the sigmoid function. Create a graph and train a classifier"""
-        #graph = self._k_class_graphs[k]
-        #with graph.as_default():
-        #    with tf.device('/device:GPU:%d' %device):
+        graph = self._k_class_graphs[k]
+        with graph.as_default():
+            with tf.device('/device:GPU:%d' %device):
                 #self._data_weights[:,k] = np.on
-        #        self._k_class[k]._data_weights = self._data_weights[:,k]
-        #        num_fake_images = data.num_points
-        #        fake_images = gan.sample(opts, num_fake_images)
-        #        prob_real, prob_fake = self._k_class[k].train_mixture_discriminator(opts, fake_images)
-        #return prob_real
-    
+                if opts['test'] == False:
+                    self._k_class[k]._data_weights = self._data_weights[:,k]
+                    num_fake_images = data.num_points
+                    fake_images = gan.sample(opts, num_fake_images)
+                    prob_real, prob_fake = self._k_class[k].train_mixture_discriminator(opts, fake_images)
+                else: 
+                    data_weights = np.ones(len(data.data))
+                    data_weights /= data_weights.sum(axis = 0, keepdims = True)
+                    self._k_class[k]._data_weights = data_weights
+                    prob_real = self._k_class[k].classify(opts,self.data_test.data)
+        return prob_real
+        
+        
     
         g = tf.Graph()
         with g.as_default():
@@ -389,7 +399,8 @@ class KGANS(object):
                 #    classifier = self._classifier(opts, data, data_weights)
                 num_fake_images = data.num_points
                 fake_images = gan.sample(opts, num_fake_images)
-                prob_real, prob_fake = classifier.train_mixture_discriminator(opts, fake_images)
+                prob_real, _  = classifier.train_mixture_discriminator(opts, fake_images)
+                
                 if opts['test'] == True:
                     prob_real = classifier.classify(opts,self.data_test.data)
         return prob_real
@@ -406,7 +417,7 @@ class KGANS(object):
         for k in range(0,opts['number_of_kGANs']):
             g1 = fig.add_subplot(opts['number_of_kGANs'],1,k+1)
             g1.axis([-max_val, max_val, -max_val, max_val])
-            fake = self._kGANs[k].sample(opts, 30000)
+            fake = self._kGANs[k].sample(opts, 60000)
             g1.hist2d(fake[:,0].flatten(), fake[:,1].flatten(), bins=(50, 50), cmap=plt.cm.jet)
             g1.set_xlim(-max_val, max_val)
             g1.set_ylim(-max_val, max_val)
@@ -523,7 +534,7 @@ class KGANS(object):
         ax.set_ylabel('model')
         cbar = fig.colorbar(cax, ticks=[0, 1])
         cbar.ax.set_yticklabels(['0', '1']) 
-        filename = opts['work_dir'] + '/assignments{:04d}.png'.format(opts['number_of_steps_made'])
+        filename = opts['work_dir'] + '/assignments{:08d}.png'.format(opts['number_of_steps_made'])
         fig.savefig(filename)
         plt.close()
 

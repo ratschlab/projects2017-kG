@@ -98,6 +98,56 @@ class Vae(object):
             return self._train_mixture_discriminator_internal(opts, fake_images)
 
 
+    def _run_batch2(self, opts, operation, placeholder, feed,placeholder1, feed1,
+                   placeholder2=None, feed2=None):
+        """Wrapper around session.run to process huge data.
+
+        It is asumed that (a) first dimension of placeholder enumerates
+        separate points, and (b) that operation is independently applied
+        to every point, i.e. we can split it point-wisely and then merge
+        the results. The second placeholder is meant either for is_train
+        flag for batch-norm or probabilities of dropout.
+
+        TODO: write util function which will be called both from this method
+        and MNIST classification evaluation as well.
+
+        """
+        assert len(feed.shape) > 0, 'Empry feed.'
+        num_points = feed.shape[0]
+        batch_size = opts['tf_run_batch_size']
+        batches_num = int(np.ceil((num_points + 0.) / batch_size))
+        result = []
+        for idx in xrange(batches_num):
+            if idx == batches_num - 1:
+                if feed2 is None:
+                    res = self._session.run(
+                        operation,
+                        feed_dict={placeholder: feed[idx * batch_size:],placeholder1: feed1[idx * batch_size:]})
+                else:
+                    res = self._session.run(
+                        operation,
+                        feed_dict={placeholder: feed[idx * batch_size:],placeholder1: feed1[idx * batch_size:],
+                                   placeholder2: feed2})
+            else:
+                if feed2 is None:
+                    res = self._session.run(
+                        operation,
+                        feed_dict={placeholder: feed[idx * batch_size: (idx + 1) * batch_size],
+                                   placeholder1: feed1[idx * batch_size:(idx + 1) * batch_size]})
+                else:
+                    res = self._session.run(
+                        operation,
+                        feed_dict={placeholder: feed[idx * batch_size:(idx + 1) * batch_size],
+                            placeholder1: feed1[idx * batch_size:(idx + 1) * batch_size],
+                            placeholder2: feed2})
+
+            if len(res.shape) == 1:
+                # convert (n,) vector to (n,1) array
+                res = np.reshape(res, [-1, 1])
+            result.append(res)
+        result = np.vstack(result)
+        assert len(result) == num_points
+        return result
     def _run_batch(self, opts, operation, placeholder, feed,
                    placeholder2=None, feed2=None):
         """Wrapper around session.run to process huge data.
@@ -271,7 +321,7 @@ class ToyVae(Vae):
             raise ValueError("Unknown recon loss value %s" % opts['recon_loss'])
         dec_enc_x = self.generator(opts, latent_x_mean,
                                    is_training=False, reuse=True)
-
+        self.loss_pp = loss_reconstruct
         loss_reconstruct = tf.reduce_mean(loss_reconstruct)
         loss_kl = tf.reduce_mean(loss_kl)
         loss = loss_kl + loss_reconstruct
@@ -313,6 +363,8 @@ class ToyVae(Vae):
         """
 
         batches_num = self._data.num_points / opts['batch_size']
+        if opts['one_batch'] == True:
+            batches_num = 1
         train_size = self._data.num_points
         num_plot = 320
         sample_prev = np.zeros([num_plot] + list(self._data.data_shape))
@@ -406,6 +458,31 @@ class ToyVae(Vae):
             self._is_training_ph, False)
         return sample
 
+    def loss_pt(self, opts):
+        num_points = self._data.num_points
+        batch_noise = utils.generate_noise(opts, self._data.num_points)
+        batch_size = opts['tf_run_batch_size']
+        batches_num = int(np.ceil((num_points + 0.) / batch_size))
+        result = []
+        for idx in xrange(batches_num):
+            if idx == batches_num - 1:
+                    res = self._session.run(
+                        self.loss_pp,
+                        feed_dict={self._real_points_ph: self._data.data[idx * batch_size:],
+                            self._noise_ph: batch_noise[idx * batch_size:],
+                            self._is_training_ph: False})
+            else:
+                    res = self._session.run(
+                        self.loss_pp,
+                        feed_dict={self._real_points_ph: self._data.data[idx * batch_size:(idx + 1) * batch_size],
+                            self._noise_ph: batch_noise[idx * batch_size:(idx + 1) * batch_size],
+                            self._is_training_ph: False})
+            if len(res.shape) == 1:
+                # convert (n,) vector to (n,1) array
+                res = np.reshape(res, [-1, 1])
+            result.append(res)
+        result = np.vstack(result)
+        return result 
 class ImageVae(Vae):
     """A simple VAE implementation, suitable for pictures.
 
@@ -561,7 +638,8 @@ class ImageVae(Vae):
             raise ValueError("Unknown recon loss value %s" % opts['recon_loss'])
         dec_enc_x = self.generator(opts, latent_x_mean,
                                    is_training=False, reuse=True)
-
+        
+        self.loss_pp = loss_reconstruct 
         loss_reconstruct = tf.reduce_mean(loss_reconstruct)
         loss_kl = tf.reduce_mean(loss_kl)
         loss = loss_kl + loss_reconstruct
@@ -604,7 +682,7 @@ class ImageVae(Vae):
 
         batches_num = self._data.num_points / opts['batch_size']
         if opts['one_batch'] == True:
-            batches_num = 1.
+            batches_num = 1
         train_size = self._data.num_points
         num_plot = 320
         sample_prev = np.zeros([num_plot] + list(self._data.data_shape))
@@ -708,12 +786,37 @@ class ImageVae(Vae):
                         self._is_training_ph: False}
                     )
         return [loss, loss_kl, loss_reconstruct]
-    
-    def loss_pt(self, opts, x):
-        batch_noise = utils.generate_noise(opts, 1)
-        loss, loss_kl, loss_reconstruct = self._session.run([self._loss, self._loss_kl,self._loss_reconstruct],
-                feed_dict={self._real_points_ph: x,
-                        self._noise_ph: batch_noise,
-                        self._is_training_ph: False}
-                    )
-        return [loss, loss_kl, loss_reconstruct]
+    def loss_pt(self, opts):
+        num_points = self._data.num_points
+        batch_noise = utils.generate_noise(opts, self._data.num_points)
+        batch_size = opts['tf_run_batch_size']
+        batches_num = int(np.ceil((num_points + 0.) / batch_size))
+        result = []
+        for idx in xrange(batches_num):
+            if idx == batches_num - 1:
+                    res = self._session.run(
+                        self.loss_pp,
+                        feed_dict={self._real_points_ph: self._data.data[idx * batch_size:],
+                            self._noise_ph: batch_noise[idx * batch_size:],
+                            self._is_training_ph: False})
+            else:
+                    res = self._session.run(
+                        self.loss_pp,
+                        feed_dict={self._real_points_ph: self._data.data[idx * batch_size:(idx + 1) * batch_size],
+                            self._noise_ph: batch_noise[idx * batch_size:(idx + 1) * batch_size],
+                            self._is_training_ph: False})
+            if len(res.shape) == 1:
+                # convert (n,) vector to (n,1) array
+                res = np.reshape(res, [-1, 1])
+            result.append(res)
+        result = np.vstack(result)
+        return result 
+        #import pdb
+        #pdb.set_trace()
+        #batch_noise = utils.generate_noise(opts, self._data.num_points)
+        #loss = self._session.run(self.loss_pp,
+        #        feed_dict={self._real_points_ph: self._data.data,
+        #                self._noise_ph: batch_noise,
+        #                self._is_training_ph: False}
+        #            )
+        #return loss

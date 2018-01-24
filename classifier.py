@@ -209,6 +209,8 @@ class ToyClassifier(Classifier):
         """
 
         batches_num = self._data.num_points / opts['batch_size_classifier']
+        if opts['one_batch'] == True:
+            batches_num = 1
         logging.debug('Training a mixture discriminator')
         for epoch in xrange(opts["mixture_c_epoch_num"]):
             for idx in xrange(batches_num):
@@ -344,6 +346,8 @@ class ImageClassifier(Classifier):
         """
 
         batches_num = self._data.num_points / opts['batch_size']
+        if opts['one_batch_class'] == True:
+            batches_num = 1
         logging.debug('Training a mixture discriminator')
         logging.debug('Using %d real points and %d fake ones' %\
                       (self._data.num_points, len(fake_images)))
@@ -360,13 +364,26 @@ class ImageClassifier(Classifier):
                     feed_dict={self._real_points_ph: batch_real_images,
                                self._fake_points_ph: batch_fake_images,
                                self._is_training_ph: True})
-
+        
         # Evaluating trained classifier on real points
         res = self._run_batch(
             opts, self._c_training,
             self._real_points_ph, self._data.data,
             self._is_training_ph, False)
-
+        #loss = np.zeros(batches_num)
+        #for idx in xrange(batches_num):
+        #        ids = np.random.choice(len(fake_images), opts['batch_size'],
+        #                               replace=False)
+        #        batch_fake_images = fake_images[ids]
+        #        ids = np.random.choice(self._data.num_points, opts['batch_size'],
+        #                               replace=False, p = self._data_weights)
+        #        batch_real_images = self._data.data[ids]
+        #        loss[idx] = self._session.run(
+        #            self._c_loss,
+        #            feed_dict={self._real_points_ph: batch_real_images,
+        #                       self._fake_points_ph: batch_fake_images,
+        #                       self._is_training_ph: False})
+        
         # Evaluating trained classifier on fake points
         #res_fake = self._run_batch(
         #    opts, self._c_training,
