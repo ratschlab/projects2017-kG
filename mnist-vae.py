@@ -23,8 +23,15 @@ flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]"
 flags.DEFINE_integer("zdim", 8, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.01, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights")
-flags.DEFINE_string("workdir", 'results_mnist_rez_long3_onebatch_class', "Working directory ['results']")
+flags.DEFINE_string("workdir", 'results_mnist_rez_batch_lastday_bw_fashion_fc2', "Working directory ['results']")
 flags.DEFINE_bool("vae", True, "use VAEs instead of GANs")
+flags.DEFINE_integer("gan_epoch_num_first_iteration", 10, "epoch number to pretrain models")
+flags.DEFINE_integer("gan_epoch_num_except_first", 10, "epoch number per iteration")
+flags.DEFINE_integer("mixture_c_epoch_num", 1, "epoch number for classifier")
+flags.DEFINE_integer("number_of_kGANs", 3, "Number of generative models")
+flags.DEFINE_integer("kGANs_number_rounds", 3, "Number of iterations")
+flags.DEFINE_bool("one_batch_class", False, "train classifier for a single batch")
+flags.DEFINE_bool("reinit_class", True, "train classifiers from scratch")
 #flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
 #flags.DEFINE_bool("vae", False, "Use VAE instead of GAN")
 #flags.DEFINE_bool("pot", False, "Use VAE instead of GAN")
@@ -57,23 +64,20 @@ def main():
     opts['ckpt_dir'] = 'checkpoints'
     
     # kGANs opts
-    opts["gan_epoch_num_first_iteration"] = 10
+    opts["gan_epoch_num_first_iteration"] = FLAGS.gan_epoch_num_first_iteration
     opts["gan_epoch_num"] = opts["gan_epoch_num_first_iteration"]
-    opts["gan_epoch_num_except_first"] = 3
-    opts["mixture_c_epoch_num"] = 1
-    opts['smoothing'] = 0.000001
+    opts["gan_epoch_num_except_first"] = FLAGS.gan_epoch_num_except_first
+    opts["mixture_c_epoch_num"] = FLAGS.mixture_c_epoch_num
     opts['plot_kGANs'] = False #do not set to True
     opts['assignment'] = FLAGS.assignment
     opts['number_of_steps_made'] = 0
-    opts['number_of_kGANs'] = 15
-    opts['kGANs_number_rounds'] = 1000
-    opts['kill_threshold'] = 0.00003 #if mixture weight is less than threshold first reinitialize (if reinitialize) then kill
-    opts['annealed'] = False
+    opts['number_of_kGANs'] = FLAGS.number_of_kGANs
+    opts['kGANs_number_rounds'] = FLAGS.kGANs_number_rounds
     opts['number_of_gpus'] = len(get_available_gpus()) # set to 1 if don't want parallel computation
-    opts['reinitialize'] = False #when a gan die want to delete it (False) or re-initialize it (True)
     opts['one_batch'] = False# update weights every batch (True) or every epoch (False)
     opts['one_batch_class'] = False
     opts['test'] = False #hack, don't set to true
+    opts['reinit_class'] = False#False
     # VAE opts
     opts['vae_sigma'] = 0.1
     opts['vae'] = FLAGS.vae
@@ -99,6 +103,7 @@ def main():
     # Optimizer
     opts['optimizer'] = 'adam' # sgd, adam
     opts["batch_size"] = 32
+    opts['batch_size_classifier'] = 32
     opts['opt_learning_rate'] = FLAGS.learning_rate
     #opts['opt_d_learning_rate'] = FLAGS.d_learning_rate
     #opts['opt_g_learning_rate'] = FLAGS.g_learning_rate
@@ -117,7 +122,7 @@ def main():
     opts['objective'] = None
     opts['data_augm'] = False
     opts['batch_norm'] = True
-    opts['dropout'] = False
+    opts['dropout'] = True#False
     opts['dropout_keep_prob'] = 0.5
 
     if opts['verbose']:
@@ -150,12 +155,16 @@ def main():
     
     for step in range(opts["kGANs_number_rounds"]):
         opts['number_of_steps_made'] = step
-        #if step+1%50 == 0:
-        #    opts["mixture_c_epoch_num"]+=1
+        #if step>100:#+1%100 == 0:
+        #    opts['one_batch_class'] = False
+            #opts["mixture_c_epoch_num"]+=1
         logging.info('Running step {} of kGAN'.format(step))
+        if step == opts["kGANs_number_rounds"]:
+            opts["gan_epoch_num"] = 10
         kG.make_step(opts, data)
         #opts['one_batch'] = True
-        opts['one_batch_class'] = True
+        if opts['reinit_class'] == False:
+            opts['one_batch_class'] = True
         #opts["mixture_c_epoch_num"] = min(step, 1875)
         opts["gan_epoch_num"] = opts["gan_epoch_num_except_first"]
         if opts['number_of_steps_made']% opts["plot_every"] == 0:

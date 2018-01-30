@@ -16,6 +16,7 @@ from metrics import Metrics
 import utils
 from kGAN import KGANS
 import pdb
+import sys
 
 flags = tf.app.flags
 #flags.DEFINE_float("g_learning_rate", 0.005,
@@ -28,8 +29,17 @@ flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]"
 flags.DEFINE_integer("zdim", 5, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.8, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights") #'soft', 'hard'
-flags.DEFINE_string("workdir", 'results_gmm', "Working directory ['results']")
+flags.DEFINE_string("workdir", 'results_gmm_cleanup', "Working directory ['results']")
 flags.DEFINE_bool("vae", True, "use VAEs instead of GANs")
+flags.DEFINE_integer("gmm_modes_num", 3, "Number of modes")
+flags.DEFINE_integer("gan_epoch_num_first_iteration", 10, "epoch number to pretrain models")
+flags.DEFINE_integer("gan_epoch_num_except_first", 10, "epoch number per iteration")
+flags.DEFINE_integer("mixture_c_epoch_num", 1, "epoch number for classifier")
+flags.DEFINE_integer("number_of_kGANs", 3, "Number of generative models")
+flags.DEFINE_integer("kGANs_number_rounds", 3, "Number of iterations")
+flags.DEFINE_bool("one_batch_class", False, "train classifier for a single batch")
+flags.DEFINE_bool("reinit_class", True, "train classifiers from scratch")
+
 FLAGS = flags.FLAGS
 
 from tensorflow.python.client import device_lib
@@ -46,7 +56,7 @@ def main():
     # dataset opts 
     opts['random_seed'] = 821
     opts['dataset'] = 'gmm' # gmm, circle_gmm,  mnist, mnist3 ...
-    opts['gmm_modes_num'] = 3
+    opts['gmm_modes_num'] = FLAGS.gmm_modes_num
     opts['gmm_max_val'] = 15.
     opts['toy_dataset_size'] = 64 * 1000 
     opts['toy_dataset_dim'] = 2
@@ -56,23 +66,20 @@ def main():
     opts['banana'] = True #skew the gaussians a bit
     
     # kGANs opts
-    opts["gan_epoch_num_first_iteration"] = 100
+    opts["gan_epoch_num_first_iteration"] = FLAGS.gan_epoch_num_first_iteration
     opts["gan_epoch_num"] = opts["gan_epoch_num_first_iteration"]
-    opts["gan_epoch_num_except_first"] = 1
-    opts["mixture_c_epoch_num"] = 1
-    opts['smoothing'] = 0.000001
+    opts["gan_epoch_num_except_first"] = FLAGS.gan_epoch_num_except_first
+    opts["mixture_c_epoch_num"] = FLAGS.mixture_c_epoch_num
     opts['plot_kGANs'] = False #do not set to True
     opts['assignment'] = FLAGS.assignment
     opts['number_of_steps_made'] = 0
-    opts['number_of_kGANs'] = 3
-    opts['kGANs_number_rounds'] = 1
-    opts['kill_threshold'] = 0.00003 #if mixture weight is less than threshold first reinitialize (if reinitialize) then kill
-    opts['annealed'] = True
+    opts['number_of_kGANs'] = FLAGS.number_of_kGANs
+    opts['kGANs_number_rounds'] = FLAGS.kGANs_number_rounds
     opts['number_of_gpus'] = len(get_available_gpus()) # set to 1 if don't want parallel computation
-    opts['reinitialize'] = False #when a gan die want to delete it (False) or re-initialize it (True)
     opts['one_batch'] = False# update weights every batch (True) or every epoch (False)
-    opts['one_batch_class'] = False# update weights every batch (True) or every epoch (False)
+    opts['one_batch_class'] = FLAGS.one_batch_class# update weights every batch (True) or every epoch (False)
     opts['test'] = False #hack, don't set to true
+    opts['reinit_class'] = FLAGS.reinit_class
     #VAE opts 
     opts['vae_sigma'] = 0.01
     opts['vae'] = FLAGS.vae
@@ -83,18 +90,18 @@ def main():
     opts["init_std"] = FLAGS.init_std
     opts["init_bias"] = 0.0
     opts['latent_space_distr'] = 'normal' # uniform, normal
-    opts["d_steps"] = 1
-    opts["g_steps"] = 2
+    #opts["d_steps"] = 1
+    #opts["g_steps"] = 2
     opts["verbose"] = True
     opts['tf_run_batch_size'] = 100
-    opts['objective'] = 'JS'
+    #opts['objective'] = 'JS'
     opts['latent_space_dim'] = FLAGS.zdim
     opts["early_stop"] = -1 # set -1 to run normally
     opts["plot_every"] = -1 # set -1 to run normally
     opts["eval_points_num"] = 1000 # 25600
     opts['digit_classification_threshold'] = 0.999
-    opts['inverse_metric'] = False # Use metric from the Unrolled GAN paper?
-    opts['inverse_num'] = 1 # Number of real points to inverse.
+    #opts['inverse_metric'] = False # Use metric from the Unrolled GAN paper?
+    #opts['inverse_num'] = 1 # Number of real points to inverse.
     
     # Optimizer
     opts['optimizer'] = 'adam' # sgd, adam
@@ -107,11 +114,14 @@ def main():
     opts['batch_norm_eps'] = 1e-05
     opts['batch_norm_decay'] = 0.9
     
+    
+    utils.create_dir(opts['work_dir'])
+    sys.stdout = sys.stderr = open(FLAGS.workdir+'/output', 'w')
+    
     if opts['verbose']:
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s')
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
-    utils.create_dir(opts['work_dir'])
     with utils.o_gfile((opts['work_dir'], 'params.txt'), 'w') as text:
         text.write('Parameters:\n')
         for key in opts:
@@ -135,23 +145,22 @@ def main():
 
         #opts['one_batch'] = True
         opts['one_batch_class'] = True
-        if step%1 ==0:
-            num_fake = opts['eval_points_num']
-            logging.debug('Sampling fake points')
-            num_fake_points = 500*opts['number_of_kGANs']
-            fake_points, num_samples_gans = kG.sample_mixture_separate_color(opts, num_fake_points)
-            logging.debug('Sampling more fake points')
+        num_fake = opts['eval_points_num']
+        logging.debug('Sampling fake points')
+        num_fake_points = 500*opts['number_of_kGANs']
+        fake_points, num_samples_gans = kG.sample_mixture_separate_color(opts, num_fake_points)
+        logging.debug('Sampling more fake points')
             
-            more_fake_points = kG.sample_mixture(opts, 500)
+        more_fake_points = kG.sample_mixture(opts, 500)
 
-            logging.debug('Plotting results')
-            opts['plot_kGANs'] = True #hack to print
-            metrics.make_plots(opts, step, data.data[:10000],
-                fake_points, weights = num_samples_gans)
+        logging.debug('Plotting results')
+        opts['plot_kGANs'] = True #hack to print
+        metrics.make_plots(opts, step, data.data[:10000],
+            fake_points, weights = num_samples_gans)
         
-            (likelihood, C) = metrics.evaluate(
-                opts, step, data.data[:500],
-                fake_points, more_fake_points, prefix='')
+           # (likelihood, C) = metrics.evaluate(
+           #     opts, step, data.data[:500],
+           #     fake_points, more_fake_points, prefix='')
     logging.debug("kGANs finished working!")
     
 

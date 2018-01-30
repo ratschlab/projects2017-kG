@@ -243,9 +243,9 @@ class ToyVae(Vae):
 
         output_shape = self._data.data_shape # (dim1, dim2, dim3)
         with tf.variable_scope("GENERATOR", reuse=reuse):
-            h0 = ops.linear(opts, noise, 50, 'h0_lin')
+            h0 = ops.linear(opts, noise, opts['number_units'], 'h0_lin')#opts['number_units'] = 50
             h0 = tf.nn.relu(h0)
-            h1 = ops.linear(opts, h0, 50, 'h1_lin')
+            h1 = ops.linear(opts, h0, opts['number_units'], 'h1_lin')
             h1 = tf.nn.relu(h1)
             h2 = ops.linear(opts, h1, np.prod(output_shape), 'h2_lin')
             h2 = tf.reshape(h2, [-1] + list(output_shape))
@@ -265,9 +265,9 @@ class ToyVae(Vae):
         """
         shape = input_.get_shape().as_list()
         with tf.variable_scope(prefix, reuse=reuse):
-            h0 = ops.linear(opts, input_, 50, 'h0_lin')
+            h0 = ops.linear(opts, input_, opts['number_units'], 'h0_lin')
             h0 = tf.nn.relu(h0)
-            h1 = ops.linear(opts, h0, 50, 'h1_lin')
+            h1 = ops.linear(opts, h0, opts['number_units'], 'h1_lin')
             h1 = tf.nn.relu(h1)
             latent_mean = ops.linear(opts, h1, opts['latent_space_dim'], scope='h2_lin')
             log_latent_sigmas = ops.linear(opts, h1, opts['latent_space_dim'], scope='h2_lin_sigma')

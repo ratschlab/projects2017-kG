@@ -142,20 +142,21 @@ class DataHandler(object):
         modes_per_row = int(np.sqrt(modes_num))
         step = np.ceil(2.*opts['gmm_max_val']/modes_per_row)
         init_i = - max_val - step/2.
-
-        #mixture_means = np.zeros([modes_num, 2])
-        #idx = 0
-        #for i in range(0,modes_num/modes_per_row):
-        #    init_i += step 
-        #    init_j = - max_val - step/2.
-        #    for j in range(0, modes_num/modes_per_row):
-        #        init_j += step
-        #        mixture_means[idx, :] = np.array([init_i,init_j])
-        #        idx += 1
         
-        mixture_means = np.random.uniform(
-            low=-max_val-1, high=max_val+1,
-            size=(modes_num, opts['toy_dataset_dim']))*1.5
+        if (opts['gmm_modes_num'] == 9):
+            mixture_means = np.zeros([modes_num, 2])
+            idx = 0
+            for i in range(0,modes_num/modes_per_row):
+                init_i += step 
+                init_j = - max_val - step/2.
+                for j in range(0, modes_num/modes_per_row):
+                    init_j += step
+                    mixture_means[idx, :] = np.array([init_i,init_j])
+                    idx += 1
+        else:
+            mixture_means = np.random.uniform(
+                low=-max_val-1, high=max_val+1,
+                size=(modes_num, opts['toy_dataset_dim']))*1.5
         
         #mixture_means = np.array([[-15,0],[15,0]])
 
@@ -223,7 +224,7 @@ class DataHandler(object):
         self.num_points = len(X)
 
         logging.debug('Loading Done.')
-
+    
     def _load_mnist(self, opts):
         """Load data from MNIST files.
 
@@ -262,13 +263,16 @@ class DataHandler(object):
         seed = 123
         np.random.seed(seed)
         np.random.shuffle(tr_X)
+        label = label_rot[idxs]
+        tr_X = tr_X[idxs,:,:,:]
+        
         np.random.seed(seed)
         np.random.shuffle(tr_Y)
         np.random.seed()
 
         self.data_shape = (28, 28, 1)
         self.data = tr_X / 255.
-        self.labels = tr_Y
+        self.labels = label#tr_Y
         self.num_points = len(tr_X)
 
         logging.debug('Loading Done.')
@@ -304,7 +308,14 @@ class DataHandler(object):
 
         tr_Y = np.asarray(tr_Y)
         te_Y = np.asarray(te_Y)
-
+        
+        if(opts['rotated_mnist']):
+            seed = 123
+            np.random.seed(seed)
+            np.random.shuffle(te_X)
+            normal = np.copy(te_X[:5000,:,:,:])
+            rotated = np.copy(np.rot90(tr_X[5000:,:,:,:],axes = (1,2)))
+            tr_X = np.concatenate((normal,rotated),axis=0)
         #X = np.concatenate((tr_X, te_X), axis=0)
         #y = np.concatenate((tr_Y, te_Y), axis=0)
 
