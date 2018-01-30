@@ -19,10 +19,11 @@ if FLAGS.experiment == 1:
     arg['gan_epoch_num_except_first'] = 10
     arg['mixture_c_epoch_num'] = 1
     arg['one_batch_class'] = True
-    arg['reinit_class'] = False 
-    arg['workdir'] = 'results_mnist'#''.join('{}:{}_'.format(key, val) for key, val in arg.items())
+    arg['reinit_class'] = False
+    arg['learning_rate'] = 0.0008
+    arg['workdir'] = 'results_mnist_nodrop'#''.join('{}:{}_'.format(key, val) for key, val in arg.items())
     arguments = ''.join(' --{} {}'.format(key, val) for key, val in arg.items())
-    cmd_line = 'python gmm-vae.py'+arguments
+    cmd_line = 'python mnist-vae.py'+arguments
 print(cmd_line)
 system(cmd_line)
 #sleep(0.5)

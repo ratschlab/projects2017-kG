@@ -218,8 +218,8 @@ class KGANS(object):
             #metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  wm, prefix = "train")    
             self._mnist_label_proportions( opts, data, metrics)
             #self.tsne_plotter(opts,  data)
-            if opts['rotated_mnist']==True:
-                self._plot_labels_ratio(opts, new_weights, data.labels)
+            #if opts['rotated_mnist']==True:
+            #    self._plot_labels_ratio(opts, new_weights, data.labels)
             #self.tsne_real_fake(opts,  data)
         elif(opts['dataset'] == 'cifar10'):
             sampled = self._sample_from_training(opts,data, self._data_weights, 50)

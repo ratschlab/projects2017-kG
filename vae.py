@@ -515,7 +515,7 @@ class ImageVae(Vae):
         dim1 = tf.shape(noise)[0]
         num_filters = opts['g_num_filters']
         num_layers = opts['g_num_layers']
-
+        keep_prob = opts['dropout_keep_prob']
         with tf.variable_scope("GENERATOR", reuse=reuse):
 
             height = output_shape[0] /  2**(num_layers - 1)

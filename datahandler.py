@@ -263,8 +263,6 @@ class DataHandler(object):
         seed = 123
         np.random.seed(seed)
         np.random.shuffle(tr_X)
-        label = label_rot[idxs]
-        tr_X = tr_X[idxs,:,:,:]
         
         np.random.seed(seed)
         np.random.shuffle(tr_Y)
@@ -272,7 +270,7 @@ class DataHandler(object):
 
         self.data_shape = (28, 28, 1)
         self.data = tr_X / 255.
-        self.labels = label#tr_Y
+        self.labels = tr_Y
         self.num_points = len(tr_X)
 
         logging.debug('Loading Done.')
@@ -309,13 +307,6 @@ class DataHandler(object):
         tr_Y = np.asarray(tr_Y)
         te_Y = np.asarray(te_Y)
         
-        if(opts['rotated_mnist']):
-            seed = 123
-            np.random.seed(seed)
-            np.random.shuffle(te_X)
-            normal = np.copy(te_X[:5000,:,:,:])
-            rotated = np.copy(np.rot90(tr_X[5000:,:,:,:],axes = (1,2)))
-            tr_X = np.concatenate((normal,rotated),axis=0)
         #X = np.concatenate((tr_X, te_X), axis=0)
         #y = np.concatenate((tr_Y, te_Y), axis=0)
 

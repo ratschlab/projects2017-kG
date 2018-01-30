@@ -23,7 +23,7 @@ flags = tf.app.flags
 #                   "Learning rate for Generator optimizers [16e-4]")
 #flags.DEFINE_float("d_learning_rate", 0.0001,
 #                   "Learning rate for Discriminator optimizers [4e-4]")
-flags.DEFINE_float("learning_rate", 0.005,
+flags.DEFINE_float("learning_rate", 0.0008,
                    "Learning rate for other optimizers [8e-4]")
 flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]")
 flags.DEFINE_integer("zdim", 5, "Dimensionality of the latent space [100]")

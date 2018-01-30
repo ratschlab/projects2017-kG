@@ -14,7 +14,6 @@ from datahandler import DataHandler
 from kGAN import KGANS
 from metrics import Metrics
 import utils
-from inception_score import get_inception_score
 
 flags = tf.app.flags
 flags.DEFINE_float("learning_rate", 0.005,
@@ -122,7 +121,7 @@ def main():
     opts['objective'] = None
     opts['data_augm'] = False
     opts['batch_norm'] = True
-    opts['dropout'] = True#False
+    opts['dropout'] = False
     opts['dropout_keep_prob'] = 0.5
 
     if opts['verbose']:
