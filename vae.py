@@ -15,6 +15,7 @@ from utils import TQDM
 import numpy as np
 import ops
 from metrics import Metrics
+from ais import ais
 
 class Vae(object):
     """A base class for running individual VAEs.
@@ -98,56 +99,6 @@ class Vae(object):
             return self._train_mixture_discriminator_internal(opts, fake_images)
 
 
-    def _run_batch2(self, opts, operation, placeholder, feed,placeholder1, feed1,
-                   placeholder2=None, feed2=None):
-        """Wrapper around session.run to process huge data.
-
-        It is asumed that (a) first dimension of placeholder enumerates
-        separate points, and (b) that operation is independently applied
-        to every point, i.e. we can split it point-wisely and then merge
-        the results. The second placeholder is meant either for is_train
-        flag for batch-norm or probabilities of dropout.
-
-        TODO: write util function which will be called both from this method
-        and MNIST classification evaluation as well.
-
-        """
-        assert len(feed.shape) > 0, 'Empry feed.'
-        num_points = feed.shape[0]
-        batch_size = opts['tf_run_batch_size']
-        batches_num = int(np.ceil((num_points + 0.) / batch_size))
-        result = []
-        for idx in xrange(batches_num):
-            if idx == batches_num - 1:
-                if feed2 is None:
-                    res = self._session.run(
-                        operation,
-                        feed_dict={placeholder: feed[idx * batch_size:],placeholder1: feed1[idx * batch_size:]})
-                else:
-                    res = self._session.run(
-                        operation,
-                        feed_dict={placeholder: feed[idx * batch_size:],placeholder1: feed1[idx * batch_size:],
-                                   placeholder2: feed2})
-            else:
-                if feed2 is None:
-                    res = self._session.run(
-                        operation,
-                        feed_dict={placeholder: feed[idx * batch_size: (idx + 1) * batch_size],
-                                   placeholder1: feed1[idx * batch_size:(idx + 1) * batch_size]})
-                else:
-                    res = self._session.run(
-                        operation,
-                        feed_dict={placeholder: feed[idx * batch_size:(idx + 1) * batch_size],
-                            placeholder1: feed1[idx * batch_size:(idx + 1) * batch_size],
-                            placeholder2: feed2})
-
-            if len(res.shape) == 1:
-                # convert (n,) vector to (n,1) array
-                res = np.reshape(res, [-1, 1])
-            result.append(res)
-        result = np.vstack(result)
-        assert len(result) == num_points
-        return result
     def _run_batch(self, opts, operation, placeholder, feed,
                    placeholder2=None, feed2=None):
         """Wrapper around session.run to process huge data.
@@ -213,6 +164,19 @@ class Vae(object):
 
     def _train_mixture_discriminator_internal(self, opts, fake_images):
         assert False, 'VAE base class has no mixture discriminator method defined.'
+
+
+class GeneratorAdapter(object):
+
+  def __init__(self, generator, input_dim, output_dim):
+    self._generator = generator
+    self.input_dim = input_dim
+    self.output_dim = output_dim
+
+  def __call__(self, z):
+    return self._generator(z)
+
+
 
 class ToyVae(Vae):
     """A simple VAE implementation, suitable for toy dataset.
@@ -351,7 +315,21 @@ class ToyVae(Vae):
         tf.add_to_collection('encoder_mean', self._enc_mean)
         tf.add_to_collection('encoder_log_sigma', self._enc_log_var)
         tf.add_to_collection('decoder', self._generated)
+        print "Building the AIS model..."
+        decoder = (lambda x, o=opts, i=is_training_ph:
+                   self.generator(o, x, i, reuse=True))
 
+        output_dim = np.prod(list(data_shape))
+        self._ais_model = ais.AIS(
+            generator=GeneratorAdapter(decoder,
+                                       opts['latent_space_dim'],
+                                       output_dim),
+            prior=ais.NormalPrior(),
+            kernel=ais.ParsenDensityEstimator(),
+            sigma=0.1,
+            num_samples=1000,
+            stepsize=0.1)
+        print "Building the AIS model: DONE"
         #self._saver = saver
 
         logging.error("Building Graph Done.")
@@ -661,7 +639,25 @@ class ImageVae(Vae):
         self._reconstruct_x = dec_enc_x
         self._enc_mean = latent_x_mean
         self._enc_log_var = log_latent_sigmas
-
+        print "Building the AIS model..."
+        ais_is_training = tf.constant(True,
+                                     dtype=tf.bool,
+                                     shape=[])
+        print "SHAPE: {}".format(generated_images.get_shape())
+        decoder = (lambda x, o=opts, i=ais_is_training:
+                   tf.reshape(self.generator(o, x, i, reuse=True),
+                              [-1, 28*28]))
+        output_dim = np.prod(list(data_shape))
+        self._ais_model = ais.AIS(
+            generator=GeneratorAdapter(decoder,
+                                       opts['latent_space_dim'],
+                                       output_dim),
+            prior=ais.NormalPrior(),
+            kernel=ais.ParsenDensityEstimator(),
+            sigma=0.1,
+            num_samples=16,
+            stepsize=0.1)
+        print "Building the AIS model: DONE"
         #saver = tf.train.Saver(max_to_keep=10)
         #tf.add_to_collection('real_points_ph', self._real_points_ph)
         #tf.add_to_collection('noise_ph', self._noise_ph)
@@ -765,6 +761,45 @@ class ImageVae(Vae):
         #                                  opts['ckpt_dir'],
         #                                  'trained-pot-final'),
         #                     global_step=counter)
+
+        #print "Computing AIS..."
+        #self.compute_ais()
+        #print "Computing AIS: DONE"
+
+    def compute_ais(self):
+        self._ais_model.set_session(self._session)
+        batch_size = 64
+        train_size = self._data.num_points
+        batch_size = min(batch_size, len(np.argwhere(self._data_weights != 0)))
+        data_ids = np.random.choice(train_size, batch_size,
+                                    replace=False, p=self._data_weights)
+        current_batch = self._data.data[data_ids].astype(np.float)
+        current_batch = np.reshape(current_batch, [batch_size, -1])
+        lld = self._ais_model.ais(current_batch,
+                                  ais.get_schedule(400, rad=4))
+        #print "=== Step: {} ===".format(current_step)
+        #print "loss: {}".format(loss)
+        #print "log-likelihood: {}".format(lld)
+        #print "mean(log-likelihood): {}".format(np.mean(lld))
+        return np.mean(lld)
+
+    def compute_ais_test(self):
+        self._ais_model.set_session(self._session)
+        batch_size = 64
+        train_size = len(self._test_data)
+        batch_size = min(batch_size, train_size)
+        data_ids = np.random.choice(train_size, batch_size,
+                                    replace=False, p=self._test_weights)
+        current_batch = self._test_data[data_ids].astype(np.float)
+        current_batch = np.reshape(current_batch, [batch_size, -1])
+        lld = self._ais_model.ais(current_batch,
+                                  ais.get_schedule(400, rad=4))
+        #print "=== Step: {} ===".format(current_step)
+        #print "loss: {}".format(loss)
+        #print "log-likelihood: {}".format(lld)
+        #print "mean(log-likelihood): {}".format(np.mean(lld))
+        return np.mean(lld)
+
 
     def _sample_internal(self, opts, num):
         """Sample from the trained GAN model.

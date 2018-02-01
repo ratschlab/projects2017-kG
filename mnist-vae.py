@@ -14,6 +14,7 @@ from datahandler import DataHandler
 from kGAN import KGANS
 from metrics import Metrics
 import utils
+import sys
 
 flags = tf.app.flags
 flags.DEFINE_float("learning_rate", 0.005,
@@ -22,15 +23,16 @@ flags.DEFINE_float("adam_beta1", 0.5, "Beta1 parameter for Adam optimizer [0.5]"
 flags.DEFINE_integer("zdim", 8, "Dimensionality of the latent space [100]")
 flags.DEFINE_float("init_std", 0.01, "Initial variance for weights [0.02]")
 flags.DEFINE_string("assignment", 'soft', "Type of update for the weights")
-flags.DEFINE_string("workdir", 'results_mnist_rez_batch_lastday_bw_fashion_fc2', "Working directory ['results']")
+flags.DEFINE_string("workdir", 'results_mnist_ais_test', "Working directory ['results']")
 flags.DEFINE_bool("vae", True, "use VAEs instead of GANs")
-flags.DEFINE_integer("gan_epoch_num_first_iteration", 10, "epoch number to pretrain models")
+flags.DEFINE_integer("gan_epoch_num_first_iteration", 1, "epoch number to pretrain models")
 flags.DEFINE_integer("gan_epoch_num_except_first", 10, "epoch number per iteration")
 flags.DEFINE_integer("mixture_c_epoch_num", 1, "epoch number for classifier")
-flags.DEFINE_integer("number_of_kGANs", 3, "Number of generative models")
+flags.DEFINE_integer("number_of_kGANs", 15, "Number of generative models")
 flags.DEFINE_integer("kGANs_number_rounds", 3, "Number of iterations")
-flags.DEFINE_bool("one_batch_class", False, "train classifier for a single batch")
-flags.DEFINE_bool("reinit_class", True, "train classifiers from scratch")
+flags.DEFINE_integer("AIS_every_it", 5, "run ais every x iterations")
+flags.DEFINE_bool("one_batch_class", True, "train classifier for a single batch")
+flags.DEFINE_bool("reinit_class", False, "train classifiers from scratch")
 #flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
 #flags.DEFINE_bool("vae", False, "Use VAE instead of GAN")
 #flags.DEFINE_bool("pot", False, "Use VAE instead of GAN")
@@ -77,6 +79,7 @@ def main():
     opts['one_batch_class'] = False
     opts['test'] = False #hack, don't set to true
     opts['reinit_class'] = False#False
+    opts['AIS_every_it'] = FLAGS.AIS_every_it
     # VAE opts
     opts['vae_sigma'] = 0.1
     opts['vae'] = FLAGS.vae
@@ -124,11 +127,15 @@ def main():
     opts['dropout'] = False
     opts['dropout_keep_prob'] = 0.5
 
+
+
+
+    utils.create_dir(opts['work_dir'])
+    sys.stdout = sys.stderr = open(FLAGS.workdir+'/output', 'w')
     if opts['verbose']:
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s')
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
-    utils.create_dir(opts['work_dir'])
     utils.create_dir(os.path.join(opts['work_dir'], opts['ckpt_dir']))
 
     with utils.o_gfile((opts['work_dir'], 'params.txt'), 'w') as text:
@@ -141,6 +148,7 @@ def main():
     opts['dataset'] = 'mnist_test'
     data_test = DataHandler(opts)
     opts['dataset'] = 'mnist'
+
     assert data_test.num_points >= opts['batch_size'], 'Training set too small'
 
     kG = KGANS(opts, data, data_test)
@@ -152,7 +160,7 @@ def main():
             data.data[random_idx], kG._data_weights, prefix='dataset_')
     
     
-    for step in range(opts["kGANs_number_rounds"]):
+    for step in range(opts["kGANs_number_rounds"]+1):
         opts['number_of_steps_made'] = step
         #if step>100:#+1%100 == 0:
         #    opts['one_batch_class'] = False
@@ -193,8 +201,8 @@ def main():
 
             res = metrics.evaluate(opts, step, data.data[:500],fake_points, more_fake_points, prefix='')
 
-        np.savetxt(opts['work_dir']+"/loss.csv", kG.loss, delimiter=",")
-        np.savetxt(opts['work_dir']+"/train_loss.csv", kG.train_loss, delimiter=",")
+        np.savetxt(opts['work_dir']+"/ais.csv", kG.ais, delimiter=",")
+        np.savetxt(opts['work_dir']+"/ais_test.csv", kG.ais_test, delimiter=",")
     logging.debug("kGANs finished working!")
 
 if __name__ == '__main__':

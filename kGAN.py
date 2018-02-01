@@ -59,8 +59,9 @@ class KGANS(object):
         elif opts['dataset'] in pic_datasets:
             gan_class = GAN.ImageVae
             self._classifier = CLASSIFIER.ImageClassifier
-            self.loss = np.zeros(opts["kGANs_number_rounds"])
-            self.train_loss = np.zeros(2*opts["kGANs_number_rounds"])
+            self.ais = np.zeros(opts["kGANs_number_rounds"])
+            self.ais_test = np.zeros(opts["kGANs_number_rounds"])
+            self.ais_idx = 0
         else:
             assert False, "We don't have any other GAN implementation yet..."
         
@@ -199,10 +200,19 @@ class KGANS(object):
         self._mixture_weights = np.copy(self._hard_assigned)/self._hard_assigned.sum()
         new_weights /= np.maximum(1., self._hard_assigned)
         # update data weights in eahc gan for the importance sampling 
+        ais = 0.
+        print "comuting AIS training"
+
         for k in range (0,self._number_of_kGANs):
             self._kGANs[k]._data_weights = new_weights[:,k]
             #self._data_weights[:,k] = self._data_weights[:,k]
-        
+            #if opts['dataset'] == 'mnist':
+                #ais += self._mixture_weights[0][k]*self._kGANs[k].compute_ais()
+        if opts['dataset'] == 'mnist':
+            if opts['number_of_steps_made'] % opts['AIS_every_it'] == 0:
+                ais = self._call_ais(opts,True)
+                self.ais[self.ais_idx] = np.sum(ais*self._mixture_weights[0])
+                print "mean(ais): {}".format(np.sum(ais*self._mixture_weights[0]))
         #print plots
         if (opts['dataset'] == 'gmm'):
             print "step done"
@@ -221,6 +231,23 @@ class KGANS(object):
             #if opts['rotated_mnist']==True:
             #    self._plot_labels_ratio(opts, new_weights, data.labels)
             #self.tsne_real_fake(opts,  data)
+            if opts['number_of_steps_made'] % opts['AIS_every_it'] == 0:
+                opts['test'] = True
+                prob_x_given_gan = self._prob_data_under_gan(opts, self.data_test)
+                opts['test'] = False
+                new_weights = np.ones(prob_x_given_gan.shape)*0.
+                new_weights[np.arange(len(prob_x_given_gan)), prob_x_given_gan.argmax(1)] = 1. 
+                for k in range (0,self._number_of_kGANs):
+                    assigned = self.data_test.data[np.argwhere(new_weights[:,k] == 1)]
+                    self._kGANs[k]._test_data = assigned
+                    self._kGANs[k]._test_weights = np.ones(len(assigned))*1./len(assigned)
+        
+                ais = self._call_ais(opts,False)
+                self.ais_test[self.ais_idx] = np.sum(ais*self._mixture_weights[0])
+                print "mean(ais_test): {}".format(self.ais_test[opts['number_of_steps_made']])
+                self.ais_idx += 1
+        
+        
         elif(opts['dataset'] == 'cifar10'):
             sampled = self._sample_from_training(opts,data, self._data_weights, 50)
             metrics = Metrics()
@@ -274,6 +301,38 @@ class KGANS(object):
     #        metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  self._data_weights, prefix = "train")
     #        self.tsne_plotter(opts,  data)
 
+    def _call_ais_internal(self,(i,train)):
+        if train == True:
+            if len(np.argwhere(self._kGANs[i]._data_weights != 0)):
+                return self._kGANs[i].compute_ais() 
+            else:
+                return 0.
+        else:
+            if len(self._kGANs[i]._test_data) != 0:
+                return self._kGANs[i].compute_ais_test()
+            else: 
+                return 0.
+    def _call_ais(self, opts, train):
+        """compute p(x_train | gan j) for each gan and store it in self._prob_x_given_gan
+        Could be done more efficiently by appending columns to empty array
+        Returns:
+        (data.num_points, opts['number_of_kGANs']) NumPy array
+
+        """
+
+        #prob_x_given_gan = np.empty([data.num_points, opts['number_of_kGANs']])
+        #for k in range (0,self._number_of_kGANs):
+        #import pdb
+        #pdb.set_trace()
+        pool = ThreadPool(opts['number_of_gpus'])
+        job_args = [(i,train) for i in range(0,self._number_of_kGANs)]
+        ais_rez = pool.map(self._call_ais_internal, job_args)
+        pool.close()
+        pool.join()
+        return np.transpose(np.squeeze(np.asarray(ais_rez)))
+    
+    
+    
     def _sample_from_training(self, opts, data, probs, num_pts):
         """sample num_pts from the training set with importance sampling"""
         data_ids = np.random.choice(self._data_num, num_pts,replace=True, p=probs[:,0])
@@ -346,15 +405,15 @@ class KGANS(object):
             g = tf.Graph()
             with g.as_default():
                 with tf.device('/device:GPU:%d' %device):
-                    #if opts['test'] == False:
-                    classifier = self._classifier(opts, data, self._data_weights[:,k])
-                    #else:
-                    #    data_weights = np.ones(len(data.data))
-                    #    data_weights /= data_weights.sum(axis = 0, keepdims = True)
-                    #    classifier = self._classifier(opts, data, data_weights)
-                    num_fake_images = data.num_points
-                    fake_images = gan.sample(opts, num_fake_images)
-                    prob_real, _  = classifier.train_mixture_discriminator(opts, fake_images)
+                    if opts['test'] == False:
+                        classifier = self._classifier(opts, data, self._data_weights[:,k])
+                        #else:
+                        #    data_weights = np.ones(len(data.data))
+                        #    data_weights /= data_weights.sum(axis = 0, keepdims = True)
+                        #    classifier = self._classifier(opts, data, data_weights)
+                        num_fake_images = data.num_points
+                        fake_images = gan.sample(opts, num_fake_images)
+                        prob_real, _  = classifier.train_mixture_discriminator(opts, fake_images)
                 
                     if opts['test'] == True:
                         prob_real = classifier.classify(opts,self.data_test.data)
