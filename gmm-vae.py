@@ -39,7 +39,8 @@ flags.DEFINE_integer("number_of_kGANs", 3, "Number of generative models")
 flags.DEFINE_integer("kGANs_number_rounds", 3, "Number of iterations")
 flags.DEFINE_bool("one_batch_class", False, "train classifier for a single batch")
 flags.DEFINE_bool("reinit_class", True, "train classifiers from scratch")
-
+flags.DEFINE_integer("AIS_every_it", 5, "run ais every x iterations")
+flags.DEFINE_bool("bagging", False, "bagging instead of kVAEs")
 FLAGS = flags.FLAGS
 
 from tensorflow.python.client import device_lib
@@ -80,6 +81,8 @@ def main():
     opts['one_batch_class'] = FLAGS.one_batch_class# update weights every batch (True) or every epoch (False)
     opts['test'] = False #hack, don't set to true
     opts['reinit_class'] = FLAGS.reinit_class
+    opts['AIS_every_it'] = FLAGS.AIS_every_it
+    opts['bagging'] = FLAGS.bagging
     #VAE opts 
     opts['vae_sigma'] = 0.01
     opts['vae'] = FLAGS.vae
@@ -130,9 +133,11 @@ def main():
     print opts['work_dir']
     
     data = DataHandler(opts)
+    data_test  = DataHandler(opts)
+    data_test.data = data.data_test
     assert data.num_points >= opts['batch_size'], 'Training set too small'
     num = data.num_points
-    kG = KGANS(opts, data)
+    kG = KGANS(opts, data, data_test)
     
     metrics = Metrics()
 
@@ -157,7 +162,8 @@ def main():
         opts['plot_kGANs'] = True #hack to print
         metrics.make_plots(opts, step, data.data[:10000],
             fake_points, weights = num_samples_gans)
-        
+        np.savetxt(opts['work_dir']+"/ais.csv", kG.ais, delimiter=",")
+        np.savetxt(opts['work_dir']+"/ais_test.csv", kG.ais_test, delimiter=",")
            # (likelihood, C) = metrics.evaluate(
            #     opts, step, data.data[:500],
            #     fake_points, more_fake_points, prefix='')

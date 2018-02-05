@@ -236,6 +236,12 @@ class ToyClassifier(Classifier):
             self._real_points_ph, self._data.data)
         return res, None
 
+    def classify(self,opts,data):
+
+        res = self._run_batch(
+            opts, self._c_training,
+            self._real_points_ph, data)
+        return res
 
         
 class ImageClassifier(Classifier):

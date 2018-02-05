@@ -436,6 +436,39 @@ class ToyVae(Vae):
             self._is_training_ph, False)
         return sample
 
+    def compute_ais(self):
+        self._ais_model.set_session(self._session)
+        batch_size = 64
+        train_size = self._data.num_points
+        batch_size = min(batch_size, len(np.argwhere(self._data_weights != 0)))
+        data_ids = np.random.choice(train_size, batch_size,
+                                    replace=False, p=self._data_weights)
+        current_batch = self._data.data[data_ids].astype(np.float)
+        current_batch = np.reshape(current_batch, [batch_size, -1])
+        lld = self._ais_model.ais(current_batch,
+                                  ais.get_schedule(400, rad=4))
+        #print "=== Step: {} ===".format(current_step)
+        #print "loss: {}".format(loss)
+        #print "log-likelihood: {}".format(lld)
+        #print "mean(log-likelihood): {}".format(np.mean(lld))
+        return np.mean(lld)
+
+    def compute_ais_test(self):
+        self._ais_model.set_session(self._session)
+        batch_size = 64
+        train_size = len(self._test_data)
+        batch_size = min(batch_size, train_size)
+        data_ids = np.random.choice(train_size, batch_size,
+                                    replace=False, p=self._test_weights)
+        current_batch = self._test_data[data_ids].astype(np.float)
+        current_batch = np.reshape(current_batch, [batch_size, -1])
+        lld = self._ais_model.ais(current_batch,
+                                  ais.get_schedule(400, rad=4))
+        #print "=== Step: {} ===".format(current_step)
+        #print "loss: {}".format(loss)
+        #print "log-likelihood: {}".format(lld)
+        #print "mean(log-likelihood): {}".format(np.mean(lld))
+        return np.mean(lld)
     def loss_pt(self, opts):
         num_points = self._data.num_points
         batch_noise = utils.generate_noise(opts, self._data.num_points)
@@ -493,7 +526,7 @@ class ImageVae(Vae):
         dim1 = tf.shape(noise)[0]
         num_filters = opts['g_num_filters']
         num_layers = opts['g_num_layers']
-        keep_prob = opts['dropout_keep_prob']
+        #keep_prob = opts['dropout_keep_prob']
         with tf.variable_scope("GENERATOR", reuse=reuse):
 
             height = output_shape[0] /  2**(num_layers - 1)

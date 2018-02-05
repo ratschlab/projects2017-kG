@@ -264,7 +264,7 @@ class ImageClassifier(Classifier):
             h2 = ops.conv2d(opts, h1, num_filters * 4, scope='h2_conv')
             h2 = ops.batch_norm(opts, h2, is_training, reuse, scope='bn_layer3')
             h2 = ops.lrelu(h2)
-            h3 = ops.linear(opts, h2, opts['number_of_kGANs']+1, scope='h3_lin')
+            h3 = ops.linear(opts, h2, self._number_classes, scope='h3_lin')
 
         return h3
 
@@ -280,7 +280,7 @@ class ImageClassifier(Classifier):
         fake_points_ph = tf.placeholder(
             tf.float32, [None] + list(data_shape), name='real_points_ph')
         labels_ph = tf.placeholder(
-            tf.float32, [None, opts['number_of_kGANs']+1], name='fake_points_ph')
+            tf.float32, [None, self._number_classes, name='fake_points_ph')
         
         is_training_ph = tf.placeholder(tf.bool, name='is_train_ph')
 

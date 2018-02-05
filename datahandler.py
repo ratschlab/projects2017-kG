@@ -73,6 +73,8 @@ class DataHandler(object):
             self._load_mnist3(opts)
         elif opts['dataset'] == 'gmm':
             self._load_gmm(opts)
+        elif opts['dataset'] == 'gmm_test':
+            self._load_gmm_test(opts)
         elif opts['dataset'] == 'circle_gmm':
             self._load_mog(opts)
         elif opts['dataset'] == 'guitars':
@@ -179,8 +181,8 @@ class DataHandler(object):
             return X
         # Now we sample points, for that we unseed
         np.random.seed()
-        num = opts['toy_dataset_size']
-        X = np.zeros((num, opts['toy_dataset_dim'], 1, 1))
+        num = int(opts['toy_dataset_size']*1.1)
+        X = np.zeros((num, int(opts['toy_dataset_dim']*1.1), 1, 1))
         for idx in xrange(num):
             comp_id = np.random.randint(modes_num)
             mean = mixture_means[comp_id]
@@ -191,8 +193,9 @@ class DataHandler(object):
                 X[idx, :, 0, 0] = np.random.multivariate_normal(mean, cov, 1)
         
         self.data_shape = (opts['toy_dataset_dim'], 1, 1)
-        self.data = X
-        self.num_points = len(X)
+        self.data = X[:opts['toy_dataset_size'],:,:,:]
+        self.data_test = X[opts['toy_dataset_size']:,:,:,:]
+        self.num_points = len(self.data)
 
         logging.debug('Loading GMM dataset done!')
     

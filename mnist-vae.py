@@ -33,6 +33,7 @@ flags.DEFINE_integer("kGANs_number_rounds", 3, "Number of iterations")
 flags.DEFINE_integer("AIS_every_it", 5, "run ais every x iterations")
 flags.DEFINE_bool("one_batch_class", True, "train classifier for a single batch")
 flags.DEFINE_bool("reinit_class", False, "train classifiers from scratch")
+flags.DEFINE_bool("bagging", False, "bagging instead of kVAEs")
 #flags.DEFINE_bool("unrolled", False, "Use unrolled GAN training [True]")
 #flags.DEFINE_bool("vae", False, "Use VAE instead of GAN")
 #flags.DEFINE_bool("pot", False, "Use VAE instead of GAN")
@@ -76,10 +77,11 @@ def main():
     opts['kGANs_number_rounds'] = FLAGS.kGANs_number_rounds
     opts['number_of_gpus'] = len(get_available_gpus()) # set to 1 if don't want parallel computation
     opts['one_batch'] = False# update weights every batch (True) or every epoch (False)
-    opts['one_batch_class'] = False
+    opts['one_batch_class'] = FLAGS.one_batch_class
     opts['test'] = False #hack, don't set to true
-    opts['reinit_class'] = False#False
+    opts['reinit_class'] = FLAGS.reinit_class#False
     opts['AIS_every_it'] = FLAGS.AIS_every_it
+    opts['bagging'] = FLAGS.bagging
     # VAE opts
     opts['vae_sigma'] = 0.1
     opts['vae'] = FLAGS.vae
@@ -166,8 +168,8 @@ def main():
         #    opts['one_batch_class'] = False
             #opts["mixture_c_epoch_num"]+=1
         logging.info('Running step {} of kGAN'.format(step))
-        if step == opts["kGANs_number_rounds"]:
-            opts["gan_epoch_num"] = 10
+        #if step == opts["kGANs_number_rounds"]:
+        #    opts["gan_epoch_num"] = 10
         kG.make_step(opts, data)
         #opts['one_batch'] = True
         if opts['reinit_class'] == False:

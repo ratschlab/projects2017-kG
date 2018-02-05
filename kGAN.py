@@ -41,7 +41,7 @@ class KGANS(object):
         self._number_of_kGANs = opts['number_of_kGANs']
         self._assignment = opts['assignment']
         if self._assignment == 'soft':
-            self._init_data_weights_uniform(opts, data)
+                self._init_data_weights_uniform(opts, data)
         elif self._assignment == 'hard':
             self._init_data_weights_hard(opts, data)
         else:
@@ -56,6 +56,9 @@ class KGANS(object):
         if opts['dataset'] in ('gmm'):
             gan_class = GAN.ToyVae
             self._classifier = CLASSIFIER.ToyClassifier
+            self.ais = np.zeros(opts["kGANs_number_rounds"])
+            self.ais_test = np.zeros(opts["kGANs_number_rounds"])
+            self.ais_idx = 0
         elif opts['dataset'] in pic_datasets:
             gan_class = GAN.ImageVae
             self._classifier = CLASSIFIER.ImageClassifier
@@ -89,7 +92,9 @@ class KGANS(object):
                 dev = it%opts['number_of_gpus']
                 with tf.device('/device:GPU:%d' %dev):
                     self._k_class.append(self._classifier(opts, data))
-
+        
+        if opts['bagging'] == True:
+            self._init_data_weights_bag_mult(opts, data)
 
     def _internal_step(self, (opts, data, k)):
         if self._mixture_weights[0][k] != 0:
@@ -104,15 +109,33 @@ class KGANS(object):
         pool.map(self._internal_step, job_args)
         pool.close()
         pool.join()
-        if self._assignment == 'soft':
+        if opts['bagging'] == True:
+            ais = self._call_ais(opts,True)
+            self.ais[0] = np.sum(ais*1./opts['number_of_kGANs'])
+            assigned = self.data_test.data
+            for i in range(0,opts['number_of_kGANs']):
+                self._kGANs[i]._test_data = assigned
+                self._kGANs[i]._test_weights = np.ones(len(assigned))*1./len(assigned)
+            ais = self._call_ais(opts,False)
+            self.ais_test[0] = np.sum(ais*1./opts['number_of_kGANs'])
+        elif self._assignment == 'soft':
             if opts['number_of_kGANs'] == 1:
                 if opts['dataset'] == 'gmm':
                     self._plot_competition_2d(opts)
                     self._plot_distr_2d(opts)
-                if opts['dataset'] == 'mnist':
+                if opts['dataset'] == 'mnist' or opts['dataset'] == 'gmm':
                     #self._kGANs[0].test_data = self.data_test.data
                     #self.loss[opts['number_of_steps_made']], _, _ = self._kGANs[0].test(opts)
-                    print 'loss: ' 
+                    print 'ais ' 
+                    ais = self._call_ais(opts,True)
+                    self.ais[0] = ais
+                    print ais
+                    assigned = self.data_test.data
+                    self._kGANs[0]._test_data = assigned
+                    self._kGANs[0]._test_weights = np.ones(len(assigned))*1./len(assigned)
+        
+                    ais = self._call_ais(opts,False)
+                    self.ais_test[0] = ais
                     #print self.loss[opts['number_of_steps_made']]
             else:
                 self._update_data_weights_soft(opts, data)
@@ -128,6 +151,25 @@ class KGANS(object):
         self._data_weights = np.ones([self._data_num, opts['number_of_kGANs']])
         self._data_weights /= self._data_weights.sum(axis = 0, keepdims = True)
     
+    def _init_data_weights_bag(self, opts, data):
+        """initialize wegiths with uniform distribution"""
+        K = opts['number_of_kGANs']
+        self._data_weights = np.random.choice([0., 1.], size=(self._data_num, opts['number_of_kGANs']), p=[1. - 1./K, 1./K])
+        self._data_weights /= self._data_weights.sum(axis = 0, keepdims = True)    
+
+    def _init_data_weights_bag_mult(self, opts, data):
+        """initialize wegiths with uniform distribution"""
+        K = opts['number_of_kGANs']
+        train_size = len(data.data)
+        bag_size = int(train_size*1./K)
+        data_copy = np.copy(data.data)
+        for k in range(0,K):
+            data_ids = np.random.choice(train_size, bag_size ,replace=True)
+            self._kGANs[k]._data.data = np.copy(data_copy[data_ids])
+            self._kGANs[k]._data_weights = np.ones(bag_size)*1./bag_size
+            self._kGANs[k]._data.num_points = bag_size
+        #self._data_weights = np.random.choice([0., 1.], size=(self._data_num, opts['number_of_kGANs']), p=[1. - 1./K, 1./K])
+        #self._data_weights /= self._data_weights.sum(axis = 0, keepdims = True)    
     
     def _update_data_weights_soft(self, opts, data):
         """ 
@@ -208,25 +250,25 @@ class KGANS(object):
             #self._data_weights[:,k] = self._data_weights[:,k]
             #if opts['dataset'] == 'mnist':
                 #ais += self._mixture_weights[0][k]*self._kGANs[k].compute_ais()
-        if opts['dataset'] == 'mnist':
-            if opts['number_of_steps_made'] % opts['AIS_every_it'] == 0:
-                ais = self._call_ais(opts,True)
-                self.ais[self.ais_idx] = np.sum(ais*self._mixture_weights[0])
-                print "mean(ais): {}".format(np.sum(ais*self._mixture_weights[0]))
+        if opts['number_of_steps_made'] % opts['AIS_every_it'] == 0:
+            ais = self._call_ais(opts,True)
+            self.ais[self.ais_idx] = np.sum(ais*self._mixture_weights[0])
+            print "mean(ais): {}".format(np.sum(ais*self._mixture_weights[0]))
         #print plots
         if (opts['dataset'] == 'gmm'):
             print "step done"
             #self._plot_competition_2d(opts)
             #self._plot_distr_2d(opts)
-        elif(opts['dataset'] == 'mnist') and opts['number_of_steps_made']%opts["plot_every"] ==0:
+        if opts['number_of_steps_made']%opts["plot_every"] ==0:
             wm = np.zeros(self._data_weights.shape)
             for k in range (0,self._number_of_kGANs):
                 wm[:,k] = self._kGANs[k]._data_weights
 
             #sampled = self._sample_from_training(opts,data, wm, 50)
-            metrics = Metrics()
-            #metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  wm, prefix = "train")    
-            self._mnist_label_proportions( opts, data, metrics)
+            if opts['dataset'] == 'mnist':
+                metrics = Metrics()
+                #metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  wm, prefix = "train")    
+                self._mnist_label_proportions( opts, data, metrics)
             #self.tsne_plotter(opts,  data)
             #if opts['rotated_mnist']==True:
             #    self._plot_labels_ratio(opts, new_weights, data.labels)
@@ -402,11 +444,17 @@ class KGANS(object):
         
         
         else:
-            g = tf.Graph()
+            if opts['test'] == False:
+                g = tf.Graph()
+                self._k_class_graphs[k] = g
+            else:
+                g = self._k_class_graphs[k]
+
             with g.as_default():
                 with tf.device('/device:GPU:%d' %device):
                     if opts['test'] == False:
                         classifier = self._classifier(opts, data, self._data_weights[:,k])
+                        self._k_class[k] = classifier
                         #else:
                         #    data_weights = np.ones(len(data.data))
                         #    data_weights /= data_weights.sum(axis = 0, keepdims = True)
@@ -416,7 +464,7 @@ class KGANS(object):
                         prob_real, _  = classifier.train_mixture_discriminator(opts, fake_images)
                 
                     if opts['test'] == True:
-                        prob_real = classifier.classify(opts,self.data_test.data)
+                        prob_real = self._k_class[k].classify(opts,self.data_test.data)
             return prob_real
     
 
