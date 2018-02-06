@@ -673,7 +673,7 @@ class ImageVae(Vae):
         self._enc_mean = latent_x_mean
         self._enc_log_var = log_latent_sigmas
         print "Building the AIS model..."
-        ais_is_training = tf.constant(True,
+        ais_is_training = tf.constant(False,
                                      dtype=tf.bool,
                                      shape=[])
         print "SHAPE: {}".format(generated_images.get_shape())

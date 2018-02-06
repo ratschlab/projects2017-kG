@@ -266,8 +266,9 @@ class KGANS(object):
 
             #sampled = self._sample_from_training(opts,data, wm, 50)
             if opts['dataset'] == 'mnist':
+                sampled = self._sample_from_training(opts,data, wm, 50)
                 metrics = Metrics()
-                #metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  wm, prefix = "train")    
+                metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  wm, prefix = "train")    
                 self._mnist_label_proportions( opts, data, metrics)
             #self.tsne_plotter(opts,  data)
             #if opts['rotated_mnist']==True:

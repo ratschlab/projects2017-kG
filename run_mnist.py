@@ -14,7 +14,7 @@ arg = {}
 
 if FLAGS.experiment == 1:
     arg['number_of_kGANs'] = 15
-    arg['kGANs_number_rounds'] = 100
+    arg['kGANs_number_rounds'] = 200
     arg['gan_epoch_num_first_iteration'] =  100
     arg['gan_epoch_num_except_first'] = 10
     arg['mixture_c_epoch_num'] = 1
@@ -22,7 +22,7 @@ if FLAGS.experiment == 1:
     arg['reinit_class'] = False
     arg['learning_rate'] = 0.005
     arg['AIS_every_it'] = 5
-    arg['workdir'] = 'results_mnist_ais_final3'#''.join('{}:{}_'.format(key, val) for key, val in arg.items())
+    arg['workdir'] = 'results_mnist_ais_fix_cross_train_sample'#''.join('{}:{}_'.format(key, val) for key, val in arg.items())
     arguments = ''.join(' --{} {}'.format(key, val) for key, val in arg.items())
     cmd_line = 'python mnist-vae.py'+arguments
 print(cmd_line)

@@ -92,7 +92,7 @@ def main():
     #opts['d_num_layers'] = 3
     opts['g_num_filters'] = 64
     opts['g_num_layers'] = 3
-    opts['recon_loss'] = 'l2sq'
+    opts['recon_loss'] = 'cross_entropy'
     
     # GAN opts    
     opts["init_std"] = FLAGS.init_std
