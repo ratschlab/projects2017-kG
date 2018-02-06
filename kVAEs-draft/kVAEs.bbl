@@ -1,0 +1,65 @@
+\begin{thebibliography}{9}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Aggarwal \& Reddy(2013)Aggarwal and Reddy]{aggarwal2013data}
+Aggarwal, Charu~C and Reddy, Chandan~K.
+\newblock \emph{Data clustering: algorithms and applications}.
+\newblock CRC press, 2013.
+
+\bibitem[Goodfellow et~al.(2014)Goodfellow, Pouget-Abadie, Mirza, Xu,
+  Warde-Farley, Ozair, Courville, and Bengio]{goodfellow2014generative}
+Goodfellow, Ian, Pouget-Abadie, Jean, Mirza, Mehdi, Xu, Bing, Warde-Farley,
+  David, Ozair, Sherjil, Courville, Aaron, and Bengio, Yoshua.
+\newblock Generative adversarial nets.
+\newblock In \emph{Advances in neural information processing systems}, pp.\
+  2672--2680, 2014.
+
+\bibitem[Hoang et~al.(2017)Hoang, Nguyen, Le, and Phung]{hoang2017multi}
+Hoang, Quan, Nguyen, Tu~Dinh, Le, Trung, and Phung, Dinh.
+\newblock Multi-generator gernerative adversarial nets.
+\newblock \emph{arXiv preprint arXiv:1708.02556}, 2017.
+
+\bibitem[Janzing \& Scholkopf(2010)Janzing and Scholkopf]{janzing2010causal}
+Janzing, Dominik and Scholkopf, Bernhard.
+\newblock Causal inference using the algorithmic markov condition.
+\newblock \emph{IEEE Transactions on Information Theory}, 56\penalty0
+  (10):\penalty0 5168--5194, 2010.
+
+\bibitem[Kingma \& Welling(2013)Kingma and Welling]{kingma2013auto}
+Kingma, Diederik~P and Welling, Max.
+\newblock Auto-encoding variational bayes.
+\newblock \emph{arXiv preprint arXiv:1312.6114}, 2013.
+
+\bibitem[Nowozin et~al.(2016)Nowozin, Cseke, and Tomioka]{nowozin2016f}
+Nowozin, Sebastian, Cseke, Botond, and Tomioka, Ryota.
+\newblock f-gan: Training generative neural samplers using variational
+  divergence minimization.
+\newblock In \emph{Advances in Neural Information Processing Systems}, pp.\
+  271--279, 2016.
+
+\bibitem[Peters et~al.(2017)Peters, Janzing, and Sch{\"o}lkopf]{PetJanSch17}
+Peters, J., Janzing, D., and Sch{\"o}lkopf, B.
+\newblock \emph{Elements of Causal Inference - Foundations and Learning
+  Algorithms}.
+\newblock Adaptive Computation and Machine Learning Series. The MIT Press,
+  Cambridge, MA, USA, 2017.
+
+\bibitem[Sch{\"o}lkopf et~al.(2012)Sch{\"o}lkopf, Janzing, Peters, Sgouritsa,
+  Zhang, and Mooij]{scholkopf2012causal}
+Sch{\"o}lkopf, Bernhard, Janzing, Dominik, Peters, Jonas, Sgouritsa, Eleni,
+  Zhang, Kun, and Mooij, Joris.
+\newblock On causal and anticausal learning.
+\newblock \emph{arXiv preprint arXiv:1206.6471}, 2012.
+
+\bibitem[Tolstikhin et~al.(2017)Tolstikhin, Gelly, Bousquet, Simon-Gabriel, and
+  Sch{\"o}lkopf]{Tolstikhin:2017wo}
+Tolstikhin, Ilya~O, Gelly, Sylvain, Bousquet, Olivier, Simon-Gabriel,
+  Carl-Johann, and Sch{\"o}lkopf, Bernhard.
+\newblock {AdaGAN - Boosting Generative Models.}
+\newblock \emph{CoRR}, 2017.
+
+\end{thebibliography}
