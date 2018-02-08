@@ -266,9 +266,9 @@ class KGANS(object):
 
             #sampled = self._sample_from_training(opts,data, wm, 50)
             if opts['dataset'] == 'mnist':
-                sampled = self._sample_from_training(opts,data, wm, 50)
+                sampled = self._sample_from_training(opts,data, wm, 64)
                 metrics = Metrics()
-                metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 50,  wm, prefix = "train")    
+                metrics._return_plots_pics(opts, opts['number_of_steps_made'], data.data, sampled, 64,  wm, prefix = "train")    
                 self._mnist_label_proportions( opts, data, metrics)
             #self.tsne_plotter(opts,  data)
             #if opts['rotated_mnist']==True:
@@ -397,8 +397,8 @@ class KGANS(object):
         D_k = self._get_prob_real_data(opts, gan_k, data, device,k)
         # probability x_i given gan_j
         p_k = (np.transpose((1. - D_k)/(D_k + 1e-12)) + 1e-12) 
-            
-        return p_k / p_k.sum(keepdims = True)
+        p_k = np.abs(1. - p_k)
+        return - p_k / p_k.sum(keepdims = True)
 
     def _prob_data_under_gan(self, opts, data):
         """compute p(x_train | gan j) for each gan and store it in self._prob_x_given_gan

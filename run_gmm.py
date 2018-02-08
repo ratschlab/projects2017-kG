@@ -15,15 +15,15 @@ arg = {}
 if FLAGS.experiment == 1:
     arg['gmm_modes_num'] = 3
     arg['number_of_kGANs'] = 3
-    arg['kGANs_number_rounds'] = 1
-    arg['gan_epoch_num_first_iteration'] =  100
-    arg['gan_epoch_num_except_first'] = 10
+    arg['kGANs_number_rounds'] = 100
+    arg['gan_epoch_num_first_iteration'] =  1
+    arg['gan_epoch_num_except_first'] = 1
     arg['mixture_c_epoch_num'] = 2
     arg['one_batch_class'] = False
     arg['learning_rate'] = 0.0008
     arg['reinit_class'] = True
     arg['bagging'] = True
-    arg['workdir'] = 'results_gmm_experiment_1_ais_bag_rep'#''.join('{}:{}_'.format(key, val) for key, val in arg.items())
+    arg['workdir'] = 'results_gmm_experiment_1_ais_abs'#''.join('{}:{}_'.format(key, val) for key, val in arg.items())
     arguments = ''.join(' --{} {}'.format(key, val) for key, val in arg.items())
     cmd_line = 'python gmm-vae.py'+arguments
 

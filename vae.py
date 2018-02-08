@@ -15,7 +15,8 @@ from utils import TQDM
 import numpy as np
 import ops
 from metrics import Metrics
-from ais import ais
+#from ais import ais
+from ais2 import ais
 
 class Vae(object):
     """A base class for running individual VAEs.
@@ -494,6 +495,8 @@ class ToyVae(Vae):
             result.append(res)
         result = np.vstack(result)
         return result 
+
+
 class ImageVae(Vae):
     """A simple VAE implementation, suitable for pictures.
 
@@ -503,6 +506,7 @@ class ImageVae(Vae):
 
         # One more placeholder for batch norm
         self._is_training_ph = None
+        self._use_second_ais = True
 
         Vae.__init__(self, opts, data, weights)
 
@@ -672,25 +676,65 @@ class ImageVae(Vae):
         self._reconstruct_x = dec_enc_x
         self._enc_mean = latent_x_mean
         self._enc_log_var = log_latent_sigmas
+
         print "Building the AIS model..."
         ais_is_training = tf.constant(False,
-                                     dtype=tf.bool,
-                                     shape=[])
-        print "SHAPE: {}".format(generated_images.get_shape())
-        decoder = (lambda x, o=opts, i=ais_is_training:
-                   tf.reshape(self.generator(o, x, i, reuse=True),
-                              [-1, 28*28]))
-        output_dim = np.prod(list(data_shape))
-        self._ais_model = ais.AIS(
-            generator=GeneratorAdapter(decoder,
-                                       opts['latent_space_dim'],
-                                       output_dim),
-            prior=ais.NormalPrior(),
-            kernel=ais.ParsenDensityEstimator(),
-            sigma=0.1,
-            num_samples=16,
-            stepsize=0.1)
+                                      dtype=tf.bool,
+                                      shape=[])
+        if self._use_second_ais:
+            # AIS parameters.
+            self._ais_opts = opts
+            ais_batch_size = 32  # TODO(damienv)
+            ais_cond_dist = "bernouille"  # TODO(damienv)
+            ais_z_dim = opts['latent_space_dim']
+            ais_config = {
+                "batch_size": ais_batch_size,
+                "cond_dist": ais_cond_dist,
+                "z_dim": opts['latent_space_dim'],
+                "output_size": list(data_shape)[0],  # e.g. 28 for MNIST
+                "c_dim": 1,   # Assume mono-channell
+                "test_is_adaptive_eps": False,
+                "test_ais_nsteps": 100,
+                "test_ais_eps": 1e-2
+            }
+            # Prior distribution over the latent space given by q(z|x)
+            # i.e. given by the encoder network.
+            ais_x = tf.placeholder(
+                tf.float32,
+                [ais_batch_size,
+                 ais_config["output_size"],
+                 ais_config["output_size"],
+                 ais_config["c_dim"]],
+                name="ais_x")
+            self._ais_x = ais_x
+            z_mean, z_log_sigma = self.discriminator(opts, ais_x,
+                                                     ais_is_training,
+                                                     reuse=True)
+            params_posterior = [z_mean, z_log_sigma]
+            # Decoder.
+            # TODO(damienv)
+            decoder = (lambda x, o=opts, i=ais_is_training:
+                       [self.generator(o, x, i, reuse=True)])
+            energy0 = ais.aaa_energy0
+            get_z0 = lambda theta, bs=ais_batch_size, z_dim=ais_z_dim: ais.aaa_get_z0(theta, bs, z_dim)
+            self._ais_model = ais.AIS(ais_x, params_posterior, decoder, energy0, get_z0, ais_config)
+        else:
+            print "SHAPE: {}".format(generated_images.get_shape())
+            decoder = (lambda x, o=opts, i=ais_is_training:
+                       tf.reshape(self.generator(o, x, i, reuse=True),
+                                  [-1, 28*28]))
+            output_dim = np.prod(list(data_shape))
+            self._ais_model = ais.AIS(
+                generator=GeneratorAdapter(decoder,
+                                           opts['latent_space_dim'],
+                                           output_dim),
+                prior=ais.NormalPrior(),
+                kernel=ais.ParsenDensityEstimator(),
+                sigma=0.1,
+                num_samples=16,
+                stepsize=0.1)
         print "Building the AIS model: DONE"
+
         #saver = tf.train.Saver(max_to_keep=10)
         #tf.add_to_collection('real_points_ph', self._real_points_ph)
         #tf.add_to_collection('noise_ph', self._noise_ph)
@@ -800,38 +844,66 @@ class ImageVae(Vae):
         #print "Computing AIS: DONE"
 
     def compute_ais(self):
-        self._ais_model.set_session(self._session)
-        batch_size = 64
-        train_size = self._data.num_points
-        batch_size = min(batch_size, len(np.argwhere(self._data_weights != 0)))
-        data_ids = np.random.choice(train_size, batch_size,
-                                    replace=False, p=self._data_weights)
-        current_batch = self._data.data[data_ids].astype(np.float)
-        current_batch = np.reshape(current_batch, [batch_size, -1])
-        lld = self._ais_model.ais(current_batch,
-                                  ais.get_schedule(400, rad=4))
-        #print "=== Step: {} ===".format(current_step)
-        #print "loss: {}".format(loss)
-        #print "log-likelihood: {}".format(lld)
-        #print "mean(log-likelihood): {}".format(np.mean(lld))
-        return np.mean(lld)
+        if self._use_second_ais:
+            ais_batch_size = 32
+            train_size = self._data.num_points
+            data_ids = np.random.choice(train_size, ais_batch_size,
+                                        replace=True, p=self._data_weights)
+            current_batch = self._data.data[data_ids].astype(np.float)
+            if self._ais_opts['input_normalize_sym']:
+                expected = (current_batch + 1.0) / 2.0
+            else:
+                expected = current_batch
+            self._ais_model.read_batch(self._session, feed_dict={self._ais_x: expected})
+            self._ais_model.evaluate_nchains(self._session, 10)
+            return 0  # TODO(damienv)
+        else:
+            self._ais_model.set_session(self._session)
+            batch_size = 64
+            train_size = self._data.num_points
+            batch_size = min(batch_size, len(np.argwhere(self._data_weights != 0)))
+            data_ids = np.random.choice(train_size, batch_size,
+                                        replace=False, p=self._data_weights)
+            current_batch = self._data.data[data_ids].astype(np.float)
+            current_batch = np.reshape(current_batch, [batch_size, -1])
+            lld = self._ais_model.ais(current_batch,
+                                      ais.get_schedule(400, rad=4))
+            #print "=== Step: {} ===".format(current_step)
+            #print "loss: {}".format(loss)
+            #print "log-likelihood: {}".format(lld)
+            #print "mean(log-likelihood): {}".format(np.mean(lld))
+            return np.mean(lld)
 
     def compute_ais_test(self):
-        self._ais_model.set_session(self._session)
-        batch_size = 64
-        train_size = len(self._test_data)
-        batch_size = min(batch_size, train_size)
-        data_ids = np.random.choice(train_size, batch_size,
-                                    replace=False, p=self._test_weights)
-        current_batch = self._test_data[data_ids].astype(np.float)
-        current_batch = np.reshape(current_batch, [batch_size, -1])
-        lld = self._ais_model.ais(current_batch,
-                                  ais.get_schedule(400, rad=4))
-        #print "=== Step: {} ===".format(current_step)
-        #print "loss: {}".format(loss)
-        #print "log-likelihood: {}".format(lld)
-        #print "mean(log-likelihood): {}".format(np.mean(lld))
-        return np.mean(lld)
+       if self._use_second_ais:
+            ais_batch_size = 32
+            train_size = len(self._test_data)
+            data_ids = np.random.choice(train_size, ais_batch_size,
+                                        replace=True, p=self._test_weights)
+            current_batch = self._test_data[data_ids].astype(np.float)
+            if self._ais_opts['input_normalize_sym']:
+                expected = (current_batch + 1.0) / 2.0
+            else:
+                expected = current_batch
+            self._ais_model.read_batch(self._session, feed_dict={self._ais_x: expected})
+            self._ais_model.evaluate_nchains(self._session, 10)
+            return 0  # TODO(damienv)
+       else:
+            self._ais_model.set_session(self._session)
+            batch_size = 64
+            train_size = len(self._test_data)
+            batch_size = min(batch_size, train_size)
+            data_ids = np.random.choice(train_size, batch_size,
+                                        replace=False, p=self._test_weights)
+            current_batch = self._test_data[data_ids].astype(np.float)
+            current_batch = np.reshape(current_batch, [batch_size, -1])
+            lld = self._ais_model.ais(current_batch,
+                                      ais.get_schedule(400, rad=4))
+            #print "=== Step: {} ===".format(current_step)
+            #print "loss: {}".format(loss)
+            #print "log-likelihood: {}".format(lld)
+            #print "mean(log-likelihood): {}".format(np.mean(lld))
+            return np.mean(lld)
 
 
     def _sample_internal(self, opts, num):
